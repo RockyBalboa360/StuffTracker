@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0b0b0c"/>
+  <rect x="44" y="56" width="424" height="6" fill="#ececea"/>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="800" fill="#ffffff">
+    <text x="44" y="190" font-size="124" textLength="300" lengthAdjust="spacingAndGlyphs">Stuff</text>
+    <text x="44" y="316" font-size="124" textLength="424" lengthAdjust="spacingAndGlyphs">Tracker</text>
+  </g>
+  <circle cx="100" cy="410" r="50" fill="#A7A9AC"/>
+  <circle cx="214" cy="410" r="50" fill="#00ADD0"/>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="800" font-size="68" text-anchor="middle" fill="#ffffff">
+    <text x="100" y="434">S</text>
+    <text x="214" y="434">T</text>
+  </g>
+  <path d="M310 396h96v-26l62 40-62 40v-26h-96z" fill="#FCCC0A"/>
+</svg>
