@@ -17,6 +17,11 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
   **Die Gesamtmenge ist der Master:** Die Tag-Mengen ergeben nie mehr als die Gesamtmenge, Tag-Änderungen lassen sie unverändert.
   **Tag-Verknüpfungen** (Mehr → Tag-Verknüpfungen, Standard: sauber ⇄ schmutzig): Erhöht man „schmutzig“ um 1, sinkt „sauber“
   um 1 und umgekehrt. Andere Tags nehmen zuerst Stücke ohne Tag, dann vom größten anderen Tag.
+  Die Reihenfolge der Verknüpfungen ist die Priorität (mit Pfeilen änderbar): Kommt ein Tag in mehreren Verknüpfungen vor,
+  wirken die späteren überwiegend nur in eine Richtung.
+- **Bestand:** Oben zeigt eine große Anzeige den aktiven Ort (Ortsfarbe als Streifen), die Buchstaben-Kacheln der Artikel
+  haben die Farbe des Ortes (in „Alle“ ein dunkles Grau). Der Balken an den Gruppen ist Subway-Grün und wechselt automatisch
+  auf eine freie Farbe, sobald ein Ort Grün verwendet.
 - **Menge** je Ort per Stepper (− / + / Zahl antippen für Zahlenfeld, gedrückt halten für Wiederholung).
 - **Transporte = Kisten:** Artikel direkt vom Artikel oder aus dem Transport-Bereich in eine Kiste legen →
   abschicken (danach gesperrt, Bestand am Start sinkt) → Ankunft bestätigen (Bestand am Ziel steigt, Tags werden übernommen).

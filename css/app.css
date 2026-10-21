@@ -130,13 +130,13 @@ button.tag { cursor: pointer; }
 .row--low { border-color: var(--warn); }
 .thumb { flex: none; display: inline-grid; place-items: center; border-radius: 10px; overflow: hidden; background: var(--surface2); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb--empty { background: linear-gradient(145deg, #2a2b30, #1a1b1e); color: #cfcfd3; border: 1px solid var(--border); }
-:root[data-theme=light] .thumb--empty { background: linear-gradient(145deg, #e7e5dc, #d8d5ca); color: #555; }
+.thumb--empty { background: var(--tile-bg, linear-gradient(145deg, #1d1e21, #111214)); color: var(--tile-fg, #cfcfd3); border: 1px solid var(--border); }
+:root[data-theme=light] .thumb--empty { background: var(--tile-bg, linear-gradient(145deg, #c9c6bb, #b4b1a5)); color: var(--tile-fg, #3b3b3b); }
 .thumb--empty b { font-weight: 800; font-size: 1.1em; }
 .thumb.sz-sm { width: 36px; height: 36px; font-size: 16px; } .thumb.sz-md { width: 50px; height: 50px; font-size: 20px; } .thumb.sz-xl { width: 88px; height: 88px; font-size: 34px; border-radius: 16px; }
 .group { margin: 14px 14px 0; }
 .grouphead { width: 100%; display: flex; align-items: center; gap: 12px; background: var(--sign); color: var(--sign-fg); border: 0; border-radius: 14px; padding: 16px 16px 14px 20px; font-weight: 800; font-size: 20px; letter-spacing: .02em; text-transform: uppercase; position: relative; overflow: hidden; }
-.grouphead::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 7px; background: var(--accent); }
+.grouphead::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 7px; background: var(--ga, #00933C); }
 .grouphead::before { content: ""; position: absolute; left: 12px; right: 12px; top: 4px; height: 1px; background: #cfcfcd; opacity: .8; }
 .grouphead .gname { flex: 1; text-align: left; }
 .grouphead .count { background: #fff; color: #000; border-radius: 99px; min-width: 28px; height: 28px; display: inline-grid; place-items: center; font-size: 15px; padding: 0 8px; }
@@ -146,7 +146,18 @@ button.tag { cursor: pointer; }
 .group .row { margin: 0; }
 .pchips { display: flex; gap: 8px; overflow-x: auto; padding: 14px 14px 2px; scrollbar-width: none; }
 .pchip { flex: none; display: inline-flex; align-items: center; gap: 7px; border: 2px solid var(--border); background: var(--surface); border-radius: 99px; padding: 4px 14px 4px 5px; font-weight: 700; font-size: 15px; }
-.pchip.on { border-color: var(--text); }
+.pchip.on { border-color: var(--pc, var(--text)); background: var(--pc, var(--surface)); color: var(--pt, var(--text)); font-size: 17px; padding: 6px 17px 6px 6px; }
+.pchip.on .badge { --bc: var(--pt) !important; --bt: var(--pc) !important; }
+.pchip.on:not([style]) { background: var(--text); color: var(--bg); border-color: var(--text); }
+.pchip.on:not([style]) .all-dot { background: var(--bg); color: var(--text); }
+.sign--place { border-bottom: 8px solid var(--pc); }
+.active-place { display: flex; align-items: center; gap: 16px; margin: 2px 0 16px; }
+.active-place small { display: block; font-size: 12px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #b9b9bd; margin-bottom: 2px; }
+.active-place b { font-size: 36px; font-weight: 800; letter-spacing: -.02em; line-height: 1.04; overflow-wrap: anywhere; }
+.active-place .all-dot { width: 72px; height: 72px; font-size: 38px; background: #e6e6e4; color: #0b0b0c; flex: none; }
+.rules { margin: 0 0 8px; padding-left: 22px; display: flex; flex-direction: column; gap: 7px; font-size: 14px; line-height: 1.4; }
+.rules li::marker { font-weight: 800; }
+.rank { width: 26px; height: 26px; border-radius: 50%; background: var(--text); color: var(--bg); display: inline-grid; place-items: center; font-weight: 800; font-size: 13px; flex: none; }
 .all-dot { width: 24px; height: 24px; border-radius: 50%; background: var(--text); color: var(--bg); display: inline-grid; place-items: center; font-weight: 800; }
 .empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; color: var(--muted); padding: 44px 24px; }
 .empty.small { padding: 22px 16px; }

@@ -58,9 +58,17 @@ export function renderSettings() {
       <button class="tag tag--add" type="button" data-act="tag-add" aria-label="${t('tagNew')}">${icon('plus', 16)}</button></div></section>
 
     <section class="card"><h3>${t('tagLinks')}</h3>
-      <p class="hint">${t('tagLinksHint')}</p>
-      ${store.tagLinks().map(([a, b], i) => `<div class="srow srow--link">
+      <ol class="rules">
+        <li>${t('tagLinksRule1')}</li>
+        <li>${t('tagLinksRule2')}</li>
+        <li>${t('tagLinksRule3')}</li>
+      </ol>
+      <p class="hint">${t('tagLinksExample')}</p>
+      ${store.tagLinks().map(([a, b], i, all) => `<div class="srow srow--link">
+        <span class="rank">${i + 1}</span>
         <span class="linkpair">${tagChip(store.tag(a), { small: true })}<b aria-hidden="true">⇄</b>${tagChip(store.tag(b), { small: true })}</span>
+        <button type="button" class="icon-btn" data-act="link-up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="up">${icon('up', 20)}</button>
+        <button type="button" class="icon-btn" data-act="link-down" data-i="${i}" ${i === all.length - 1 ? 'disabled' : ''} aria-label="down">${icon('down', 20)}</button>
         <button type="button" class="icon-btn icon-btn--danger" data-act="link-del" data-i="${i}" aria-label="${t('delete')}">${icon('trash', 20)}</button></div>`).join('') || `<p class="hint">${t('tagLinksNone')}</p>`}
       <button type="button" class="btn btn--block" data-act="link-add">${icon('plus')} ${t('linkAdd')}</button></section>
 
@@ -227,6 +235,8 @@ actions['tag-edit'] = (el) => {
 
 /* ---------- Tag-Verknüpfungen ---------- */
 actions['link-del'] = (el) => store.removeTagLink(Number(el.dataset.i));
+actions['link-up'] = (el) => store.moveTagLink(Number(el.dataset.i), -1);
+actions['link-down'] = (el) => store.moveTagLink(Number(el.dataset.i), 1);
 actions['link-add'] = () => {
   const st = { a: null, b: null };
   const pick = (which) => `<div class="tagrow">${store.tags().map((g) => tagChip(g, { on: st[which] === g.id, act: 'lk-' + which, attrs: `data-id="${g.id}"` })).join('')}</div>`;

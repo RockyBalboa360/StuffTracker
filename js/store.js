@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 4, tagsTotal: 16 };
 
 let data = null;
@@ -361,6 +361,14 @@ export function addTagLink(a, b) {
   return true;
 }
 export function removeTagLink(i) { mutate(() => { data.tagLinks.splice(i, 1); }); }
+/** Reihenfolge = Priorität: weiter oben stehende Verknüpfungen gelten zuerst. */
+export function moveTagLink(i, d) {
+  mutate(() => {
+    const j = i + d;
+    if (j < 0 || j >= data.tagLinks.length) return;
+    [data.tagLinks[i], data.tagLinks[j]] = [data.tagLinks[j], data.tagLinks[i]];
+  });
+}
 /** Stück und Tag-Mengen aller Kisten, die gerade unterwegs sind. */
 export function transitInfo(itemId) {
   const out = { total: 0, tags: {} };

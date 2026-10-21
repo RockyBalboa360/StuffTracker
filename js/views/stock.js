@@ -1,9 +1,26 @@
 // Bestand: Gruppen -> Artikel, Ortsfilter, Suche.
 import { t } from '../i18n.js';
 import * as store from '../store.js';
-import { esc, icon, badge, tagDot, untaggedDot, thumb, actions, ui } from '../ui.js';
+import { esc, icon, badge, tagDot, untaggedDot, thumb, actions, ui, placeLook, PALETTE } from '../ui.js';
 
-const selPlace = () => ui.place || store.currentPlaceId();
+const selPlace = () => {
+  const p = ui.place || store.currentPlaceId();
+  return p === 'all' || store.place(p) ? p : store.currentPlaceId();
+};
+
+/**
+ * Farbe des Balkens an den Gruppen: Standard ein Subway-Grün. Nutzt ein Ort bereits Grün (oder Hellgrün),
+ * wird automatisch die nächste Farbe gewählt, die kein Ort verwendet.
+ */
+const ACCENT_FAMILIES = [
+  [PALETTE.green, PALETTE.lime], [PALETTE.cyan], [PALETTE.purple], [PALETTE.brown],
+  [PALETTE.blue], [PALETTE.grey], [PALETTE.orange], [PALETTE.red], [PALETTE.yellow],
+];
+export function groupAccent() {
+  const used = new Set(store.places().map((p) => placeLook(p).color.toLowerCase()));
+  const free = ACCENT_FAMILIES.find((fam) => !fam.some((c) => used.has(c.toLowerCase())));
+  return (free || ACCENT_FAMILIES[0])[0];
+}
 
 function haystack(it) {
   const parts = [store.nm(it), store.nm(store.group(it.groupId))];
@@ -14,7 +31,6 @@ function haystack(it) {
   return parts.join(' ').toLowerCase();
 }
 
-/** Je Ort: Symbol, Gesamtzahl und kleine Kreise nur für die dort aktiven Tags. */
 /** Kreise für ein Stück-Bündel: zuerst die Stücke ohne Tag (transparent), dann je aktives Tag. */
 function dotsFor(tags, total) {
   const tagged = Object.values(tags).reduce((a, b) => a + b, 0);
@@ -22,6 +38,7 @@ function dotsFor(tags, total) {
   return (free > 0 ? untaggedDot(free) : '') + store.tagCounts(tags).map(([g, n]) => tagDot(g, n)).join('');
 }
 
+/** Ansicht „Alle“: je Ort Symbol, Gesamtzahl und kleine Kreise nur für die dort aktiven Tags. */
 function placeStock(it, p) {
   const e = it.stock[p.id];
   const dots = dotsFor(e.tags, e.qty);
@@ -38,7 +55,8 @@ function row(it, pid, all) {
   } else {
     const e = it.stock[pid];
     qty = e?.qty || 0; low = store.isLow(it, pid);
-    places = e && e.qty > 0 ? placeStock(it, store.place(pid)) : '';
+    // Ein Ort gewählt: Ort und Gesamtzahl stehen schon oben bzw. rechts, hier nur die Tag-Kreise.
+    places = e && e.qty > 0 ? `<span class="pq">${dotsFor(e.tags, e.qty)}</span>` : '';
   }
   const transitHtml = all && transit.total > 0
     ? `<span class="pq pq--transit" title="${t('tab.transport')}"><span class="tbadge">${icon('transport', 18)}</span><i class="pq-n">${transit.total}</i>${dotsFor(transit.tags, transit.total)}</span>` : '';
@@ -65,12 +83,15 @@ function listHtml() {
   }
   const byGroup = new Map(store.groups().map((g) => [g.id, []]));
   list.forEach((it) => (byGroup.get(it.groupId) || byGroup.set(it.groupId, []).get(it.groupId)).push(it));
+  // Kachel-Farbe der Artikel: Farbe des gewählten Ortes, in „Alle“ ein dunkles Grau (CSS-Vorgabe).
+  const look = !all && store.place(sp) ? placeLook(store.place(sp)) : null;
+  const vars = `--ga:${groupAccent()};${look ? `--tile-bg:${look.color};--tile-fg:${look.text};` : ''}`;
   let html = '';
   for (const [gid, arr] of byGroup) {
     if (!arr.length) continue;
     const g = store.group(gid);
     const closed = ui.collapsed[gid] && !q.length;
-    html += `<section class="group ${closed ? 'closed' : ''}">
+    html += `<section class="group ${closed ? 'closed' : ''}" style="${vars}">
       <button class="grouphead" type="button" data-act="grp-toggle" data-g="${gid}">
         <span class="gname">${esc(g ? store.nm(g) : '–')}</span><span class="count">${arr.length}</span>${icon('chevron', 20)}</button>
       <div class="group-body">${closed ? '' : arr.map((it) => row(it, sp, all)).join('')}</div></section>`;
@@ -85,15 +106,32 @@ function allBtn() {
 }
 const syncAllBtn = () => { const b = document.getElementById('grp-all'); if (b) b.outerHTML = allBtn(); };
 
+/** Große Anzeige des aktiven Ortes im Kopf: man sieht sofort, an welchem Ort man gerade Artikel bearbeitet. */
+function activePlace(sp) {
+  if (sp === 'all') {
+    return `<div class="active-place active-place--all"><span class="all-dot">∗</span>
+      <div><small>${t('viewing')}</small><b>${t('allPlaces')}</b></div></div>`;
+  }
+  const p = store.place(sp);
+  return `<div class="active-place">${badge(p, 'xl')}
+    <div><small>${t('viewing')}</small><b>${esc(p.name)}</b></div></div>`;
+}
+
 export function renderStock() {
   const sp = selPlace();
-  return `<header class="sign">
+  const sel = sp === 'all' ? null : store.place(sp);
+  const look = sel ? placeLook(sel) : null;
+  return `<header class="sign ${sel ? 'sign--place' : ''}" ${look ? `style="--pc:${look.color}"` : ''}>
       <div class="sign-kicker sign-kicker--title"><h1>${t('tab.stock')}</h1>${allBtn()}</div>
+      ${activePlace(sp)}
       <label class="search">${icon('search', 20)}<input id="q" type="search" placeholder="${t('searchPh')}" value="${esc(ui.search)}" autocomplete="off" enterkeyhint="search"></label>
     </header>
     <div class="pchips" role="tablist">
       <button class="pchip ${sp === 'all' ? 'on' : ''}" type="button" data-act="stock-place" data-p="all"><span class="all-dot">∗</span> ${t('all')}</button>
-      ${store.places().map((p) => `<button class="pchip ${sp === p.id ? 'on' : ''}" type="button" data-act="stock-place" data-p="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}
+      ${store.places().map((p) => {
+    const l = placeLook(p);
+    return `<button class="pchip ${sp === p.id ? 'on' : ''}" type="button" style="--pc:${l.color};--pt:${l.text}" data-act="stock-place" data-p="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`;
+  }).join('')}
     </div>
     <div id="stock-list" class="list">${listHtml()}</div>
     <button class="fab" type="button" data-act="item-new" aria-label="${t('itemNew')}">${icon('plus', 28)}</button>`;
