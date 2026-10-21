@@ -37,15 +37,18 @@ const P = {
   bell: '<path d="M6 17V11a6 6 0 1112 0v6l2 2H4zM10 21h4"/>',
 };
 /** Transport-Symbol: der gefüllte Subway-Pfeil (Vorlage „Downtown & Brooklyn“), alle anderen Symbole sind Linien. */
-const TRANSPORT_ICON = '<path d="M1.5 9h12.5V3.5l8.5 8.5-8.5 8.5V15H1.5z"/>';
+const TRANSPORT_ICON = '<path d="M1 10.1H21V13.9H1Z M23 12L14 3L11.45 5.55L17.91 12L11.45 18.45L14 21Z"/>';
 export const icon = (name, size = 22) => (name === 'transport'
   ? `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">${TRANSPORT_ICON}</svg>`
   : `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`);
 
-/** Richtungspfeil wie auf den NYC-Subway-Schildern: dicker gerader Schaft, Spitze mit rechtem Winkel (gefüllt). */
-const ARROW_PATH = 'M0 12h80V0l20 20-20 20V28H0z';
+/**
+ * Richtungspfeil wie auf den NYC-Subway-Schildern (Vorlage „Downtown & Brooklyn“): dicker gerader Schaft und ein
+ * OFFENER Pfeilkopf aus zwei dicken Balken im rechten Winkel, der Raum zwischen Schaft und Balken bleibt leer.
+ */
+const ARROW_PATH = 'M0 16.5H94V27.5H0Z M100 22L78 0L70.93 7.07L85.86 22L70.93 36.93L78 44Z';
 export const arrow = (cls = '') =>
-  `<svg class="arrow ${cls}" viewBox="0 0 100 40" aria-hidden="true"><path d="${ARROW_PATH}" fill="currentColor"/></svg>`;
+  `<svg class="arrow ${cls}" viewBox="0 0 100 44" aria-hidden="true"><path d="${ARROW_PATH}" fill="currentColor"/></svg>`;
 
 /* ---------- Badges (Linien-Symbole) ---------- */
 const MTA = {
