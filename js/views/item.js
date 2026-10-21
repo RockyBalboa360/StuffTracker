@@ -51,6 +51,7 @@ function placeCard(it, p) {
     </div>
     ${tags}
     <div class="pcard-actions">
+      <button class="btn btn--sm" type="button" data-act="item-book" data-item="${it.id}" data-place="${p.id}">${icon('plus', 18)} ${t('bookBtn')}</button>
       ${qty > 0 ? `<button class="btn btn--sm" type="button" data-act="item-move" data-item="${it.id}" data-place="${p.id}">${icon('box', 18)} ${t('toBox')}</button>
       <button class="btn btn--sm" type="button" data-act="item-retire" data-item="${it.id}" data-place="${p.id}">${icon('ban', 18)} ${t('retire')}</button>` : ''}
       <button class="btn btn--sm ${e?.min?.on ? 'btn--on' : ''}" type="button" data-act="item-min" data-item="${it.id}" data-place="${p.id}">${icon('bell', 18)} ${e?.min?.on ? store.minLabel(e) : t('minSet')}</button>
@@ -166,21 +167,23 @@ export function openItemForm(itemId, presetPlace) {
     render: (hh) => `
       <label class="lbl" for="f-name">${t('name')}</label>
       <input id="f-name" class="field" type="text" maxlength="60" value="${esc(st.name)}" placeholder="${t('namePh')}" autocomplete="off">
-      <div class="lbl">${t('group')}</div>
-      <div class="chips" id="f-groups">${store.groups().map((g) => `<button type="button" class="chip ${g.id === st.groupId ? 'on' : ''}" data-act="f-group" data-id="${g.id}">${esc(store.nm(g))}</button>`).join('')}</div>
+      <label class="lbl" for="f-group">${t('group')}</label>
+      <select id="f-group" class="field">${store.groups().map((g) => `<option value="${g.id}" ${g.id === st.groupId ? 'selected' : ''}>${esc(store.nm(g))}</option>`).join('')}</select>
       ${it ? '' : `
-        <div class="lbl">${t('photo')}</div>
-        <button type="button" class="photo-btn" data-act="f-photo">${st.photo ? `<span class="thumb sz-xl"><img src="${st.photo}" alt=""></span>` : `<span class="thumb thumb--empty sz-xl">${icon('camera', 28)}</span>`}</button>
-        <div class="lbl">${t('startStock')}</div>
-        <div class="chips">${store.places().map((p) => `<button type="button" class="chip chip--badge ${p.id === st.placeId ? 'on' : ''}" data-act="f-place" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
-        <div class="pad">${stepper({ value: hh.qty ?? 1, on: 'nf-qty' })}</div>
+        <div class="nf-two">
+          <div class="nf-photo">
+            <div class="lbl">${t('photo')}</div>
+            <button type="button" class="photo-btn" data-act="f-photo">${st.photo ? `<span class="thumb sz-xl"><img src="${st.photo}" alt=""></span>` : `<span class="thumb thumb--empty sz-xl">${icon('camera', 28)}</span>`}</button>
+          </div>
+          <div class="nf-stock">
+            <div class="lbl">${t('startStock')}</div>
+            <div class="chips">${store.places().map((p) => `<button type="button" class="chip chip--badge ${p.id === st.placeId ? 'on' : ''}" data-act="f-place" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
+            <div class="pad">${stepper({ value: hh.qty ?? 1, on: 'nf-qty' })}</div>
+          </div>
+        </div>
         ${tagSection(hh.qty ?? 1)}`}`,
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="f-save">${icon('check')} ${t('save')}</button>`,
     actions: {
-      'f-group': (el) => {
-        st.groupId = el.dataset.id;
-        h.el.querySelectorAll('#f-groups .chip').forEach((c) => c.classList.toggle('on', c === el));
-      },
       'f-place': (el) => {
         st.placeId = el.dataset.id;
         h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el));
@@ -203,6 +206,7 @@ export function openItemForm(itemId, presetPlace) {
     },
   });
   h.qty = 1;
+  h.el.addEventListener('change', (e) => { if (e.target.id === 'f-group') st.groupId = e.target.value; });
   const nameEl = h.el.querySelector('#f-name');
   // Name bei Redraw (z. B. nach Foto) erhalten
   const origRedraw = h.redraw;
@@ -309,6 +313,120 @@ export function openMove(itemId, placeId) {
   };
   return h;
 }
+
+/* ================= Zu-/Abgang buchen (größere Mengen) ================= */
+stepHandlers['bk-tag'] = (a, v) => topSheet()?.onTag?.(a.tag, v);
+stepHandlers['bk-plain'] = (_a, v) => topSheet()?.onPlain?.(v);
+
+/**
+ * Größere Mengen eines Artikels an einem Ort zubuchen (Neukauf) oder abbuchen, je Tag.
+ * Anders als eine Kiste ändert das die Gesamtmenge. Zugang kann direkt in eine Kiste gelegt werden.
+ */
+export function openBook(itemId, placeId) {
+  const it = store.item(itemId);
+  const pl = store.place(placeId);
+  const others = store.places().filter((p) => p.id !== placeId);
+  const drafts = store.transports().filter((x) => x.status === 'draft' && x.from === placeId);
+  const canBox = others.length > 0;
+  const st = { out: false, counts: {}, plain: 0, extra: [], toBox: false, sel: drafts[0]?.id || 'new', dest: others[0]?.id, name: '', choice: '' };
+  const cur = () => it.stock[placeId];
+  const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+  const total = () => sum(st.counts) + st.plain;
+  /** Tags, die hier eine Zeile haben: bereits am Ort aktive plus beim Zugang frisch aktivierte. */
+  const rowTags = () => {
+    const have = store.tagCounts(cur()?.tags).map(([g]) => g.id);
+    const ids = st.out ? have : [...have, ...st.extra.filter((x) => !have.includes(x))];
+    return store.tags().filter((g) => ids.includes(g.id));
+  };
+  const outLimits = () => {
+    const free = store.freeTags(it, placeId);
+    return { free, plain: Math.max(0, store.available(it, placeId) - Object.values(free).reduce((a, b) => a + b, 0)) };
+  };
+  const body = () => {
+    const lim = st.out ? outLimits() : null;
+    const rows = rowTags().filter((g) => !st.out || lim.free[g.id] > 0);
+    const q = cur()?.qty || 0;
+    const next = st.out ? q - total() : q + total();
+    const inactive = st.out ? [] : store.tags().filter((g) => !rowTags().some((r) => r.id === g.id));
+    const plainMax = st.out ? lim.plain : 99999;
+    return `
+      <div class="strip">${thumb(it, 'sm')} <div><b>${esc(store.nm(it))}</b><div class="muted">${badge(pl, 'xs')} ${esc(pl.name)} · ${t('totalQty')} ${q}</div></div></div>
+      <div class="segmented">
+        <button type="button" class="${st.out ? '' : 'on'}" data-act="bk-mode" data-v="in">${icon('plus', 18)} ${t('bookIn')}</button>
+        <button type="button" class="${st.out ? 'on' : ''}" data-act="bk-mode" data-v="out">${icon('minus', 18)} ${t('bookOut')}</button>
+      </div>
+      <p class="hint">${t(st.out ? 'bookHintOut' : 'bookHint')}</p>
+      <div class="lbl">${t('tagsAndCount')}</div>
+      <div class="tagbox">
+        ${rows.map((g) => `<div class="tagline">${tagChip(g)}${stepper({ value: st.counts[g.id] || 0, min: 0, max: st.out ? lim.free[g.id] : 99999, on: 'bk-tag', args: { tag: g.id } })}</div>`).join('')}
+        ${!st.out || plainMax > 0 ? `<div class="tagline tagline--none"><span class="tag-ph">${t('noTag')}</span>${stepper({ value: st.plain, min: 0, max: plainMax, on: 'bk-plain' })}</div>` : ''}
+        ${inactive.length || !st.out ? `<div class="lbl lbl--in">${t('bookMoreTags')}</div>
+        <div class="tagrow">
+          ${inactive.map((g) => tagChip(g, { on: false, act: 'bk-tag-add', attrs: `data-tag="${g.id}"` })).join('')}
+          <button class="tag tag--add" type="button" data-act="bk-tag-new" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
+        </div>` : ''}
+      </div>
+      <div class="strip strip--sum"><span>${t('bookSum')}: <b>${st.out ? '−' : '+'}${total()}</b></span><span class="sum-next">${t('bookNew')}: <b>${next}</b></span></div>
+      ${!st.out && canBox ? `
+        <button type="button" class="switch ${st.toBox ? 'on' : ''}" data-act="bk-box" role="switch" aria-checked="${st.toBox}"><i></i><span>${t('bookToBox')}</span></button>
+        ${st.toBox ? `
+          <div class="lbl">${t('whichBox')}</div>
+          <div class="boxlist">
+            ${drafts.map((d) => `<button type="button" class="boxcard ${st.sel === d.id ? 'on' : ''}" data-act="bk-sel" data-id="${d.id}">
+                <span class="routes">${badge(pl, 'xs')}${arrow('mini')}${badge(store.place(d.to), 'xs')}</span>
+                <b>${esc(d.name)}</b><span class="muted">${t('nLines', { n: d.lines.length })}</span></button>`).join('')}
+            <button type="button" class="boxcard boxcard--new ${st.sel === 'new' ? 'on' : ''}" data-act="bk-sel" data-id="new">
+              ${icon('plus', 20)} <b>${t('boxNew')}</b></button>
+          </div>
+          ${st.sel === 'new' ? `
+            <div class="lbl">${t('destination')}</div>
+            <div class="chips">${others.map((p) => `<button type="button" class="chip chip--badge ${p.id === st.dest ? 'on' : ''}" data-act="bk-dest" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
+            ${boxNameHtml(st)}` : ''}` : ''}` : ''}`;
+  };
+  const h = openSheet({
+    title: t('bookTitle'),
+    render: body,
+    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="bk-ok">${icon('check')} ${t(st.out ? 'bookOut' : 'bookIn')}</button>`,
+    actions: {
+      'bk-mode': (el) => { st.out = el.dataset.v === 'out'; st.counts = {}; st.plain = 0; st.extra = []; h.redraw(); },
+      'bk-tag-add': (el) => {
+        if (rowTags().length >= store.LIMITS.tagsPerEntry) { toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn'); return; }
+        st.extra.push(el.dataset.tag); h.redraw();
+      },
+      'bk-tag-new': () => openTagForm(null, (g) => {
+        if (!g) return;
+        if (rowTags().length >= store.LIMITS.tagsPerEntry) { toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn'); return; }
+        st.extra.push(g.id); h.redraw();
+      }),
+      'bk-box': () => { st.toBox = !st.toBox; h.redraw(); },
+      'bk-sel': (el) => { st.sel = el.dataset.id; h.redraw(); },
+      'bk-dest': (el) => { st.dest = el.dataset.id; h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el)); },
+      'bk-ok': () => {
+        if (total() <= 0) { toast(t('bookNone'), 'warn'); return; }
+        const r = store.bookStock(itemId, placeId, { tags: st.counts, plain: st.plain, out: st.out });
+        if (!r) { toast(t('bookFail'), 'warn'); return; }
+        if (st.out) toast(t('bookDoneOut', { n: r.qty }));
+        else if (st.toBox) {
+          let tid = st.sel;
+          if (tid === 'new') tid = store.createTransport({ from: placeId, to: st.dest, name: boxNameValue(st) }).id;
+          if (store.addLine(tid, itemId, r.qty, r.tags)) toast(t('bookDoneBox', { n: r.qty, box: store.nm(store.transport(tid)) }));
+          else toast(t('bookDone', { n: r.qty }));
+        } else toast(t('bookDone', { n: r.qty }));
+        closeSheet();
+      },
+    },
+  });
+  bindBoxName(h, st);
+  h.onTag = (tag, v) => {
+    const max = st.out ? (outLimits().free[tag] || 0) : 99999;
+    v = Math.max(0, Math.min(v, max));
+    if (v > 0) st.counts[tag] = v; else delete st.counts[tag];
+    h.redraw();
+  };
+  h.onPlain = (v) => { st.plain = Math.max(0, Math.min(v, st.out ? outLimits().plain : 99999)); h.redraw(); };
+  return h;
+}
+actions['item-book'] = (el) => openBook(el.dataset.item, el.dataset.place);
 
 /* ================= Aussondern ================= */
 export function openRetire(itemId, placeId) {

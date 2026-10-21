@@ -11,7 +11,14 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
 - **Artikel in Gruppen** (zwei Ebenen), Foto als kleines Vorschaubild (Kamera oder Galerie). Nach der Auswahl öffnet der
   **Foto-Editor**: mit zwei Knöpfen links/rechts drehen, mit Finger oder Regler (bzw. Mausrad) vergrößern und verschieben –
   der Rahmen ist der Ausschnitt (quadratisch).
-- **Neuer Artikel** vergibt Tags und Stückzahl je Tag gleich beim Anlegen („Tags und Anzahl“); wird der Anfangsbestand
+- **Zu-/Abgang buchen** (Artikel → Ort → „Zu-/Abgang“): größere Mengen mit Tags zubuchen (Neukauf) oder abbuchen (Verbrauch).
+  Links die Tags (bestehende, weitere aktivierbar, neue anlegbar), rechts die Anzahl, alle starten bei 0. Anders als eine Kiste
+  ändert das die **Gesamtmenge**. Beim Zugang kann alles direkt in eine bestehende oder neue Kiste gelegt werden; Abgang nimmt
+  nur Stücke, die nicht in einer Kiste vorgemerkt sind.
+- **Bestandsliste anpassen** (Mehr → Darstellung): Fotos und Anfangsbuchstaben einzeln ein-/ausschaltbar; sind beide aus,
+  ist die Liste kompakt ohne Bildfeld.
+- **Neuer Artikel:** Gruppe als Auswahlliste (statt vieler Chips), Foto und Anfangsbestand nebeneinander, damit „Tags und
+  Anzahl“ ohne Scrollen sichtbar bleibt. Der Artikel vergibt Tags und Stückzahl je Tag gleich beim Anlegen („Tags und Anzahl“); wird der Anfangsbestand
   verkleinert, werden die Tag-Anzahlen von hinten entsprechend gekürzt.
 - **Mehr:** Orte, Gruppen, Tag-Verknüpfungen und Gruppenfarbe sind aufklappbare Abschnitte (Kopfzeile mit Kurzinfo,
   der Zustand wird gemerkt), damit die Karte übersichtlich bleibt.

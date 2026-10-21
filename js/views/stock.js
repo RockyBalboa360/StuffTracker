@@ -65,8 +65,9 @@ function row(it, pid, all) {
   const transitHtml = all && transit.total > 0
     ? `<span class="pq pq--transit" title="${t('tab.transport')}"><span class="tbadge">${icon('transport', 18)}</span><i class="pq-n">${transit.total}</i>${dotsFor(transit.tags, transit.total)}</span>` : '';
   const bottom = places + transitHtml;
+  const ss = store.settings();
   return `<button class="row" type="button" data-act="item-open" data-item="${it.id}">
-    ${thumb(it, 'md')}
+    ${thumb(it, 'md', { photos: ss.listPhotos !== false, letters: ss.listLetters !== false })}
     <span class="row-main"><b>${esc(store.nm(it))}</b>
       ${bottom ? `<span class="row-places">${bottom}</span>` : ''}</span>
     <span class="row-qty ${low ? 'low' : ''}">${low ? icon('alert', 16) : ''}<b>${qty}</b></span>

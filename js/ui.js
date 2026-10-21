@@ -109,13 +109,13 @@ export function tagCountChips(tags, small = true) {
 }
 
 /* ---------- Thumbnail ---------- */
-export function thumb(it, size = 'md') {
-  const src = store.photo(it.id);
+export function thumb(it, size = 'md', { photos = true, letters = true } = {}) {
+  const src = photos ? store.photo(it.id) : null;
   const g = store.group(it.groupId);
   const ini = esc((store.nm(it) || '?').trim().charAt(0).toUpperCase());
-  return src
-    ? `<span class="thumb sz-${size}"><img src="${src}" alt=""></span>`
-    : `<span class="thumb thumb--empty sz-${size}" title="${esc(store.nm(g))}"><b>${ini}</b></span>`;
+  if (src) return `<span class="thumb sz-${size}"><img src="${src}" alt=""></span>`;
+  if (!letters) return '';
+  return `<span class="thumb thumb--empty sz-${size}" title="${esc(store.nm(g))}"><b>${ini}</b></span>`;
 }
 
 /* ---------- Stepper ---------- */

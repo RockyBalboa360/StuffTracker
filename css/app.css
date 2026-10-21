@@ -261,6 +261,15 @@ button.stat:active { background: var(--surface2); }
 .fab { position: fixed; right: 18px; bottom: calc(var(--nav-h) + 18px + env(safe-area-inset-bottom)); width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--accent); color: #111; display: grid; place-items: center; box-shadow: 0 6px 18px rgba(0,0,0,.45); z-index: 5; }
 .fab:active { transform: scale(.94); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.lbl--in { margin: 6px 0 0; }
+.strip--sum { justify-content: space-between; font-size: 15px; margin-top: 14px; }
+.strip--sum b { font-size: 19px; }
+.sum-next { color: var(--muted); }
+.sum-next b { color: var(--text); }
+.nf-two { display: flex; gap: 16px; align-items: flex-start; }
+.nf-photo { flex: none; }
+.nf-stock { flex: 1; min-width: 0; }
+.nf-stock .stepper { zoom: .9; }
 .chip { border: 2px solid var(--border); background: var(--surface2); border-radius: 99px; padding: 9px 15px; font-weight: 700; font-size: 15px; display: inline-flex; align-items: center; gap: 8px; }
 .chip--badge { padding: 4px 14px 4px 5px; }
 .chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }

@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.10.0';
+export const VERSION = '0.11.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 16 };
 
 let data = null;
@@ -326,6 +326,42 @@ export function setQty(itemId, pid, qty) {
     addLog('adjust', { item: nm(it), place: place(pid)?.name, from: e.qty, to: qty });
     e.qty = qty; normalize(e);
   });
+}
+/**
+ * Zugang oder Abgang größerer Mengen buchen (Neukauf, Verbrauch …): ändert die Gesamtmenge.
+ * tags = { tagId: anzahl }, plain = Stücke ohne Tag. Abgang nimmt nur Stücke, die nicht in Kisten vorgemerkt sind.
+ * Liefert { qty, tags } (die gebuchte Menge) oder false, wenn die Buchung nicht möglich ist.
+ */
+export function bookStock(itemId, pid, { tags = {}, plain = 0, out = false }) {
+  const it = item(itemId);
+  if (!it || !place(pid)) return false;
+  const tg = Object.fromEntries(Object.entries(tags).map(([k, n]) => [k, Math.floor(Number(n) || 0)]).filter(([k, n]) => n > 0 && tag(k)));
+  plain = Math.max(0, Math.floor(Number(plain) || 0));
+  const n = sum(tg) + plain;
+  if (n <= 0) return false;
+  const e = it.stock[pid];
+  if (out) {
+    if (!e) return false;
+    const free = freeTags(it, pid);
+    const freePlain = available(it, pid) - sum(free);
+    if (plain > freePlain || Object.entries(tg).some(([k, c]) => c > (free[k] || 0))) return false;
+  } else {
+    const kinds = new Set([...Object.keys(e?.tags || {}), ...Object.keys(tg)]);
+    if (kinds.size > LIMITS.tagsPerEntry) return false;
+  }
+  mutate(() => {
+    const en = ensureEntry(it, pid);
+    if (out) {
+      for (const [k, c] of Object.entries(tg)) en.tags[k] -= c;
+      en.qty -= n;
+    } else {
+      en.qty += n;
+      addTagCounts(en, tg);
+    }
+    normalize(en);
+    addLog(out ? 'stockOut' : 'stockIn', { item: nm(it), place: place(pid)?.name, qty: n });
+  });
+  return { qty: n, tags: tg };
 }
 /** Verknüpfte Tags (logische Zusammenhänge, z. B. sauber <-> schmutzig). */
 export const tagLinks = () => data.tagLinks || [];

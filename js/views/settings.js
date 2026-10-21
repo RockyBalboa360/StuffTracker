@@ -45,7 +45,11 @@ export function renderSettings() {
 
     <section class="card"><h3>${t('appearance')}</h3>
       ${seg('set-theme', s.theme, [['auto', t('theme.auto')], ['system', t('theme.system')], ['dark', t('theme.dark')], ['light', t('theme.light')]])}
-      <p class="hint">${t('theme.' + s.theme + 'Hint')}</p></section>
+      <p class="hint">${t('theme.' + s.theme + 'Hint')}</p>
+      <div class="lbl">${t('listShow')}</div>
+      <button type="button" class="switch ${s.listPhotos !== false ? 'on' : ''}" data-act="list-toggle" data-k="listPhotos" role="switch" aria-checked="${s.listPhotos !== false}"><i></i><span>${t('listPhotos')}</span></button>
+      <button type="button" class="switch ${s.listLetters !== false ? 'on' : ''}" data-act="list-toggle" data-k="listLetters" role="switch" aria-checked="${s.listLetters !== false}"><i></i><span>${t('listLetters')}</span></button>
+      <p class="hint">${t('listHint')}</p></section>
 
     <section class="card"><h3>${t('wxSettings')}</h3>
       <button type="button" class="switch ${s.weatherOn ? 'on' : ''}" data-act="wx-toggle" role="switch" aria-checked="${s.weatherOn}"><i></i><span>${t('wxShow')}</span></button>
@@ -417,7 +421,8 @@ function download(name, text, mime) {
 }
 const stamp = () => new Date().toISOString().slice(0, 10);
 actions['exp-json'] = () => { download(`stufftracker-${stamp()}.json`, store.exportJson(), 'application/json'); store.markBackup(); toast(t('exported')); };
-actions['wx-toggle'] = () => store.setSetting('weatherOn', !store.settings().weatherOn);
+actions['list-toggle'] = (el) => store.setSetting(el.dataset.k, store.settings()[el.dataset.k] === false);
+actions['wx-toggle'] =() => store.setSetting('weatherOn', !store.settings().weatherOn);
 actions['exp-csv'] = () => { download(`stufftracker-${stamp()}.csv`, store.exportCsv(), 'text/csv;charset=utf-8'); toast(t('exported')); };
 actions['imp-json'] = () => {
   const input = document.createElement('input');
