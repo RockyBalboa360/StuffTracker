@@ -57,6 +57,13 @@ export function renderSettings() {
       <div class="tagrow">${store.tags().map((g) => `<span class="tagwrap">${tagChip(g, { act: 'tag-edit', attrs: `data-id="${g.id}"` })}</span>`).join('')}
       <button class="tag tag--add" type="button" data-act="tag-add" aria-label="${t('tagNew')}">${icon('plus', 16)}</button></div></section>
 
+    <section class="card"><h3>${t('tagLinks')}</h3>
+      <p class="hint">${t('tagLinksHint')}</p>
+      ${store.tagLinks().map(([a, b], i) => `<div class="srow srow--link">
+        <span class="linkpair">${tagChip(store.tag(a), { small: true })}<b aria-hidden="true">⇄</b>${tagChip(store.tag(b), { small: true })}</span>
+        <button type="button" class="icon-btn icon-btn--danger" data-act="link-del" data-i="${i}" aria-label="${t('delete')}">${icon('trash', 20)}</button></div>`).join('') || `<p class="hint">${t('tagLinksNone')}</p>`}
+      <button type="button" class="btn btn--block" data-act="link-add">${icon('plus')} ${t('linkAdd')}</button></section>
+
     <section class="card"><h3>${t('widget')}</h3>
       <p class="hint">${t('widgetHint')}</p>
       <button type="button" class="switch ${w.on ? 'on' : ''}" data-act="wd-on" role="switch" aria-checked="${w.on}"><i></i><span>${t('widgetShow')}</span></button>
@@ -216,6 +223,29 @@ actions['tag-edit'] = (el) => {
     },
   });
   return h;
+};
+
+/* ---------- Tag-Verknüpfungen ---------- */
+actions['link-del'] = (el) => store.removeTagLink(Number(el.dataset.i));
+actions['link-add'] = () => {
+  const st = { a: null, b: null };
+  const pick = (which) => `<div class="tagrow">${store.tags().map((g) => tagChip(g, { on: st[which] === g.id, act: 'lk-' + which, attrs: `data-id="${g.id}"` })).join('')}</div>`;
+  const h = openSheet({
+    title: t('linkAdd'),
+    render: () => `<p class="hint">${t('tagLinksHint')}</p>
+      <div class="lbl">${t('linkFirst')}</div>${pick('a')}
+      <div class="lbl">${t('linkSecond')}</div>${pick('b')}`,
+    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="lk-ok">${icon('check')} ${t('save')}</button>`,
+    actions: {
+      'lk-a': (el) => { st.a = el.dataset.id; h.redraw(); },
+      'lk-b': (el) => { st.b = el.dataset.id; h.redraw(); },
+      'lk-ok': () => {
+        if (!st.a || !st.b || st.a === st.b) { toast(t('linkNeedTwo'), 'warn'); return; }
+        if (!store.addTagLink(st.a, st.b)) { toast(t('linkExists'), 'warn'); return; }
+        closeSheet();
+      },
+    },
+  });
 };
 
 /* ---------- Widget ---------- */

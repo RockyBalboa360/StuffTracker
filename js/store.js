@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 4, tagsTotal: 16 };
 
 let data = null;
@@ -69,6 +69,13 @@ function migrate(d) {
       else if (p.name === 'Cabin') p.name = 'Commuter flat';
     });
     d.v = 3;
+  }
+  if (d.v < 4) {
+    // v4: Gesamtmenge ist Master (Tag-Summe <= Menge), Tag-Verknüpfung sauber <-> schmutzig
+    d.tagLinks ||= (d.tags.some((g) => g.id === 'tg_clean') && d.tags.some((g) => g.id === 'tg_dirty')) ? [['tg_clean', 'tg_dirty']] : [];
+    d.items.forEach((it) => Object.values(it.stock).forEach((e) => normalize(e)));
+    d.transports.forEach((tr) => tr.lines.forEach((l) => { l.tags ||= {}; trimTags(l.tags, l.qty); }));
+    d.v = 4;
   }
   d.settings.homeButtons ||= 'dashboard';
   return d;
@@ -192,13 +199,14 @@ function addLog(type, o = {}) {
   data.log.unshift({ id: uid(), ts: Date.now(), type, ...o });
   if (data.log.length > 500) data.log.length = 500;
 }
-/** Tags tragen je Artikel+Ort eine Stückzahl: tags = { tagId: anzahl }, jede Zahl <= qty. */
+/** Tags tragen je Artikel+Ort eine Stückzahl: tags = { tagId: anzahl }. Die Gesamtmenge ist der Master: Summe der Tag-Mengen <= qty. */
 function normalize(e) {
   if (e.qty <= 0) { e.qty = 0; e.tags = {}; return; }
   for (const k of Object.keys(e.tags)) {
     if (e.tags[k] > e.qty) e.tags[k] = e.qty;
     if (!(e.tags[k] > 0)) delete e.tags[k];
   }
+  trimTags(e.tags, e.qty);
 }
 function ensureEntry(it, pid) {
   return (it.stock[pid] ||= { qty: 0, tags: {}, min: { on: false, v: 1, tag: null } });
@@ -292,21 +300,80 @@ export function setQty(itemId, pid, qty) {
     e.qty = qty; normalize(e);
   });
 }
-/** Anzahl der Stücke mit diesem Tag setzen (0 entfernt das Tag). false = Tag-Limit erreicht. */
+/** Verknüpfte Tags (logische Zusammenhänge, z. B. sauber <-> schmutzig). */
+export const tagLinks = () => data.tagLinks || [];
+export function partnersOf(tagId) {
+  return tagLinks().flatMap(([a, b]) => (a === tagId ? [b] : b === tagId ? [a] : [])).filter((id) => data.tags.some((g) => g.id === id));
+}
+/** Größte mögliche Menge für ein Tag: die Gesamtmenge (fehlende Stücke kommen von anderen Tags). */
+export function tagMax(itemId, pid) {
+  return item(itemId)?.stock[pid]?.qty || 0;
+}
+/**
+ * Menge eines Tags setzen. Die Gesamtmenge bleibt unverändert:
+ * Mehr -> zuerst von den verknüpften Tags, dann von den Stücken ohne Tag, zuletzt vom jeweils größten anderen Tag.
+ * Weniger -> an das erste verknüpfte Tag, sonst zu den Stücken ohne Tag.
+ * false = Tag-Limit je Artikel und Ort erreicht.
+ */
 export function setTagCount(itemId, pid, tagId, n) {
   const e = item(itemId)?.stock[pid];
   if (!e) return true;
-  n = Math.max(0, Math.min(e.qty, Math.floor(Number(n) || 0)));
-  if (n > 0 && !(tagId in e.tags) && Object.keys(e.tags).length >= LIMITS.tagsPerEntry) return false;
-  mutate(() => { if (n > 0) e.tags[tagId] = n; else delete e.tags[tagId]; });
+  const cur = e.tags[tagId] || 0;
+  n = Math.max(0, Math.min(tagMax(itemId, pid, tagId), Math.floor(Number(n) || 0)));
+  const delta = n - cur;
+  if (delta === 0) return true;
+  const partners = partnersOf(tagId);
+  const next = { ...e.tags };
+  if (delta > 0) {
+    let need = delta;
+    for (const p of partners) {
+      const take = Math.min(need, next[p] || 0);
+      if (take > 0) { next[p] -= take; need -= take; if (next[p] <= 0) delete next[p]; }
+    }
+    need -= Math.min(need, untagged(e));
+    const others = Object.keys(next).filter((k) => k !== tagId).sort((a, b) => next[b] - next[a]);
+    for (const k of others) {
+      if (need <= 0) break;
+      const take = Math.min(need, next[k]);
+      next[k] -= take; need -= take;
+      if (next[k] <= 0) delete next[k];
+    }
+  } else if (partners.length) {
+    const p = partners[0];
+    if (p in next || Object.keys(next).length - (n === 0 ? 1 : 0) < LIMITS.tagsPerEntry) next[p] = (next[p] || 0) - delta;
+  }
+  if (n > 0) next[tagId] = n; else delete next[tagId];
+  if (Object.keys(next).length > LIMITS.tagsPerEntry) return false;
+  mutate(() => { e.tags = next; normalize(e); });
   return true;
 }
-/** Startwert beim Hinzufügen eines Tags: die noch ungetaggten Stücke (mindestens 1). */
-export function defaultTagCount(itemId, pid) {
+/** Startwert beim Hinzufügen eines Tags: 1 Stück von einem verknüpften Tag, sonst alle Stücke ohne Tag (mindestens 1). */
+export function defaultTagCount(itemId, pid, tagId) {
   const e = item(itemId)?.stock[pid];
-  return e ? Math.max(1, untagged(e)) : 1;
+  if (!e) return 1;
+  if (partnersOf(tagId).some((p) => e.tags[p] > 0)) return 1;
+  return Math.max(1, untagged(e));
 }
-export function retire(itemId, pid, qty, reason, note) {
+export function addTagLink(a, b) {
+  if (a === b || !tag(a) || !tag(b)) return false;
+  if (tagLinks().some(([x, y]) => (x === a && y === b) || (x === b && y === a))) return false;
+  mutate(() => { (data.tagLinks ||= []).push([a, b]); });
+  return true;
+}
+export function removeTagLink(i) { mutate(() => { data.tagLinks.splice(i, 1); }); }
+/** Stück und Tag-Mengen aller Kisten, die gerade unterwegs sind. */
+export function transitInfo(itemId) {
+  const out = { total: 0, tags: {} };
+  for (const tr of data.transports) {
+    if (tr.status !== 'sent') continue;
+    for (const l of tr.lines) {
+      if (l.itemId !== itemId) continue;
+      out.total += l.qty;
+      for (const [k, n] of Object.entries(l.tags || {})) out.tags[k] = (out.tags[k] || 0) + n;
+    }
+  }
+  return out;
+}export function retire(itemId, pid, qty, reason, note) {
   mutate(() => {
     const it = item(itemId); const e = it.stock[pid];
     qty = Math.min(qty, e.qty);
@@ -374,6 +441,7 @@ export function updateTag(id, patch) {
 export function deleteTag(id) {
   mutate(() => {
     data.tags = data.tags.filter((g) => g.id !== id);
+    data.tagLinks = (data.tagLinks || []).filter((l) => !l.includes(id));
     data.items.forEach((it) => Object.values(it.stock).forEach((e) => {
       delete e.tags[id];
       if (e.min?.tag === id) e.min.tag = null;
@@ -547,7 +615,8 @@ function seed(lang, empty = false) {
     { id: 'tg_damaged', key: 'tag.damaged', style: 'damaged' },
   ];
   const d = {
-    v: 3,
+    v: 4,
+    tagLinks: [['tg_clean', 'tg_dirty']],
     settings: {
       lang: 'auto', theme: 'auto', placeMode: 'auto', manualPlace: null, lastPlace: null, lastGeo: null,
       homeButtons: 'dashboard', boxCounter: 0, sampleCleared: empty,

@@ -98,7 +98,13 @@ button.tag { cursor: pointer; }
 .tagbox { display: flex; flex-direction: column; gap: 10px; }
 .tagline .tag { flex: none; }
 .tagline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.tagline .stepper { transform: scale(.82); transform-origin: right center; margin: -5px 0; }
+.tagline .stepper { zoom: .8; margin-left: auto; flex: none; }
+.tag-ph { color: var(--muted); font-size: 14px; font-weight: 700; padding-left: 4px; }
+.countbox { zoom: .8; margin-left: auto; flex: none; min-width: 190px; height: 56px; display: grid; place-items: center; font: 800 26px var(--font); letter-spacing: -.02em; border: 2px dashed var(--border); border-radius: 18px; font-variant-numeric: tabular-nums; }
+.note--total { font-weight: 800; text-transform: uppercase; letter-spacing: .05em; font-size: 12px; }
+.linkpair { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.linkpair b { font-size: 20px; color: var(--muted); }
+.srow--link { padding: 10px 0; }
 
 /* ---------- Listen ---------- */
 .list { margin: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
@@ -112,7 +118,8 @@ button.tag { cursor: pointer; }
 .pq .pq-n { font-style: normal; font-weight: 800; font-size: 26px; line-height: 1; letter-spacing: -.02em; margin-right: 2px; }
 .pq--transit em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--muted); }
 .tbadge { width: 36px; height: 36px; border-radius: 50%; background: var(--sign); color: #fff; display: inline-grid; place-items: center; border: 2px solid var(--border); flex: none; }
-.tdot { --tt: #fff; width: 25px; height: 25px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 13px; font-weight: 800; line-height: 1; color: var(--tt); background: var(--tc); border: 2px solid transparent; flex: none; }
+.tdot { --tt: #fff; --d: 1; --dia: calc(1.5em + (var(--d) - 1) * .62em); width: var(--dia); height: var(--dia); border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; font-weight: 800; line-height: 1; color: var(--tt); background: var(--tc); border: 1.5px solid transparent; flex: none; font-variant-numeric: tabular-nums; }
+.tdot--none { color: var(--text); background: transparent; border: 1.5px solid var(--text); }
 .tdot--clean { color: #0a2740; background: linear-gradient(135deg, #f6fcff, #bcdcf8); box-shadow: 0 0 6px rgba(150,210,255,.55); }
 .tdot--dirty { color: #f8edd2; background-color: #8b6b2d; background-image: radial-gradient(circle at 30% 30%, rgba(48,29,6,.6) 0 2.5px, transparent 3px), radial-gradient(circle at 70% 72%, rgba(48,29,6,.5) 0 2px, transparent 2.5px); border-color: #59421a; }
 .tdot--lost { color: #e6e8ff; background: #3d3fa6; border-color: #8f93ea; }

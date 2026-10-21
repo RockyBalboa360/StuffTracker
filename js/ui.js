@@ -81,13 +81,14 @@ export function tagChip(tg, { on = true, act = '', attrs = '', small = false, co
   const tag = act ? 'button' : 'span';
   return `<${tag} class="${cls}" style="--tc:${color};--tt:${dark ? '#111' : '#fff'}" ${act ? `data-act="${act}" type="button"` : ''} ${attrs}><i></i>${esc(store.nm(tg))}${count != null ? `<em>${count}</em>` : ''}</${tag}>`;
 }
-/** Kleiner Kreis in der Tag-Farbe, nur mit der Stückzahl (Bestandsliste). */
+/** Kleiner Kreis in der Tag-Farbe, nur mit der Stückzahl. Der Durchmesser wächst mit der Stellenzahl (--d). */
 export function tagDot(tg, n) {
   const color = tg.color || MTA.grey;
   const dark = tg.style === 'plain' && color.toLowerCase() === MTA.yellow.toLowerCase();
-  return `<span class="tdot tdot--${tg.style}" style="--tc:${color};--tt:${dark ? '#111' : '#fff'}" title="${esc(store.nm(tg))}" aria-label="${esc(store.nm(tg))}: ${n}">${n}</span>`;
+  return `<span class="tdot tdot--${tg.style}" style="--tc:${color};--tt:${dark ? '#111' : '#fff'};--d:${String(n).length}" title="${esc(store.nm(tg))}" aria-label="${esc(store.nm(tg))}: ${n}">${n}</span>`;
 }
-/** Tag-Etiketten mit Stückzahl für einen Bestandseintrag ({tagId: anzahl}). */
+/** Stücke ohne Tag: transparenter Kreis mit dünnem hellem Rand. */
+export const untaggedDot = (n) => `<span class="tdot tdot--none" style="--d:${String(n).length}" title="${esc(t('noTag'))}" aria-label="${esc(t('noTag'))}: ${n}">${n}</span>`;/** Tag-Etiketten mit Stückzahl für einen Bestandseintrag ({tagId: anzahl}). */
 export function tagCountChips(tags, small = true) {
   return store.tagCounts(tags).map(([g, n]) => tagChip(g, { small, count: n })).join('');
 }

@@ -1,7 +1,7 @@
 // Bestand: Gruppen -> Artikel, Ortsfilter, Suche.
 import { t } from '../i18n.js';
 import * as store from '../store.js';
-import { esc, icon, badge, tagDot, thumb, actions, ui } from '../ui.js';
+import { esc, icon, badge, tagDot, untaggedDot, thumb, actions, ui } from '../ui.js';
 
 const selPlace = () => ui.place || store.currentPlaceId();
 
@@ -15,17 +15,24 @@ function haystack(it) {
 }
 
 /** Je Ort: Symbol, Gesamtzahl und kleine Kreise nur für die dort aktiven Tags. */
+/** Kreise für ein Stück-Bündel: zuerst die Stücke ohne Tag (transparent), dann je aktives Tag. */
+function dotsFor(tags, total) {
+  const tagged = Object.values(tags).reduce((a, b) => a + b, 0);
+  const free = Math.max(0, total - tagged);
+  return (free > 0 ? untaggedDot(free) : '') + store.tagCounts(tags).map(([g, n]) => tagDot(g, n)).join('');
+}
+
 function placeStock(it, p) {
   const e = it.stock[p.id];
-  const dots = store.tagCounts(e.tags).map(([g, n]) => tagDot(g, n)).join('');
+  const dots = dotsFor(e.tags, e.qty);
   return `<span class="pq">${badge(p, 'ml')}<i class="pq-n">${e.qty}</i>${dots}</span>`;
 }
 
 function row(it, pid, all) {
   let qty; let low = false; let places;
-  const transit = store.inTransit(it.id);
+  const transit = store.transitInfo(it.id);
   if (all) {
-    qty = store.totalQty(it) + transit;
+    qty = store.totalQty(it) + transit.total;
     low = store.places().some((p) => store.isLow(it, p.id));
     places = store.places().filter((p) => store.qtyAt(it, p.id) > 0).map((p) => placeStock(it, p)).join('');
   } else {
@@ -33,8 +40,8 @@ function row(it, pid, all) {
     qty = e?.qty || 0; low = store.isLow(it, pid);
     places = e && e.qty > 0 ? placeStock(it, store.place(pid)) : '';
   }
-  const transitHtml = all && transit > 0
-    ? `<span class="pq pq--transit" title="${t('tab.transport')}"><span class="tbadge">${icon('transport', 18)}</span><i class="pq-n">${transit}</i><em>${t('tab.transport')}</em></span>` : '';
+  const transitHtml = all && transit.total > 0
+    ? `<span class="pq pq--transit" title="${t('tab.transport')}"><span class="tbadge">${icon('transport', 18)}</span><i class="pq-n">${transit.total}</i>${dotsFor(transit.tags, transit.total)}</span>` : '';
   const bottom = places + transitHtml;
   return `<button class="row" type="button" data-act="item-open" data-item="${it.id}">
     ${thumb(it, 'md')}

@@ -9,7 +9,16 @@ import { pickPhoto } from '../photo.js';
 
 stepHandlers['local-qty'] = (_a, v) => { const s = topSheet(); if (s) s.qty = v; };
 stepHandlers['item-qty'] = (a, v) => store.setQty(a.item, a.place, v);
-stepHandlers['tag-count'] = (a, v) => store.setTagCount(a.item, a.place, a.tag, v);
+stepHandlers['tag-count'] = (a, v) => {
+  if (!store.setTagCount(a.item, a.place, a.tag, v)) toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn');
+};
+
+/** Tag zum Artikel am Ort hinzufügen (Startmenge siehe store.defaultTagCount); meldet, wenn nichts frei ist. */
+function addTagTo(item, place, tag) {
+  const ok = store.setTagCount(item, place, tag, store.defaultTagCount(item, place, tag));
+  if (!ok) toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn');
+  else if (!(store.item(item).stock[place].tags[tag] > 0)) toast(t('noFreePieces'), 'warn');
+}
 
 /* ================= Detail ================= */
 function placeCard(it, p) {
@@ -21,8 +30,8 @@ function placeCard(it, p) {
   const rest = e ? store.untagged(e) : 0;
   const tags = qty > 0
     ? `<div class="tagbox">
-        ${active.map(([g, n]) => `<div class="tagline">${tagChip(g)}${stepper({ value: n, min: 0, max: qty, on: 'tag-count', args: { item: it.id, place: p.id, tag: g.id } })}</div>`).join('')}
-        ${active.length && rest > 0 ? `<div class="note">${t('untagged', { n: rest })}</div>` : ''}
+        ${active.map(([g, n]) => `<div class="tagline">${tagChip(g)}${stepper({ value: n, min: 0, max: store.tagMax(it.id, p.id, g.id), on: 'tag-count', args: { item: it.id, place: p.id, tag: g.id } })}</div>`).join('')}
+        ${rest > 0 ? `<div class="tagline tagline--none"><span class="tag-ph">${t('noTag')}</span><span class="countbox" aria-label="${t('noTag')}: ${rest}">${rest}</span></div>` : ''}
         <div class="tagrow">
           ${store.tags().filter((g) => !(e.tags[g.id] > 0)).map((g) => tagChip(g, { on: false, act: 'item-tag', attrs: `data-item="${it.id}" data-place="${p.id}" data-tag="${g.id}"` })).join('')}
           <button class="tag tag--add" type="button" data-act="item-tag-new" data-item="${it.id}" data-place="${p.id}" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
@@ -33,6 +42,7 @@ function placeCard(it, p) {
       ${low ? `<span class="warn">${icon('alert', 16)} ${t('low')}</span>` : ''}</header>
     <div class="pcard-qty">
       ${stepper({ value: qty, on: 'item-qty', args: { item: it.id, place: p.id } })}
+      <span class="note note--total">${t('totalQty')}</span>
       ${res ? `<span class="note">${t('reserved', { n: res })}</span>` : ''}
     </div>
     ${tags}
@@ -77,7 +87,7 @@ export function openItem(id) {
 actions['item-open'] = (el) => openItem(el.dataset.item);
 actions['item-tag'] = (el) => {
   const { item, place, tag } = el.dataset;
-  if (!store.setTagCount(item, place, tag, store.defaultTagCount(item, place))) toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn');
+  addTagTo(item, place, tag);
 };
 actions['item-photo'] = (el) => openPhotoSheet(el.dataset.item);
 actions['item-edit'] = (el) => openItemForm(el.dataset.item);
@@ -86,9 +96,7 @@ actions['item-retire'] = (el) => openRetire(el.dataset.item, el.dataset.place);
 actions['item-min'] = (el) => openMin(el.dataset.item, el.dataset.place);
 actions['item-tag-new'] = (el) => {
   const { item, place } = el.dataset;
-  openTagForm(null, (g) => {
-    if (g && !store.setTagCount(item, place, g.id, store.defaultTagCount(item, place))) toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn');
-  });
+  openTagForm(null, (g) => { if (g) addTagTo(item, place, g.id); });
 };
 actions['item-delete'] = async (el) => {
   const id = el.dataset.item;

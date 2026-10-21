@@ -12,7 +12,11 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
 - **Tags** als Etiketten zum Antippen. Ein Tag zählt **Stückzahlen**: Langarmshirt in „Wohnung“, Bestand 4, davon
   3 sauber und 1 schmutzig – der Artikel steht nur einmal in der Liste. Höchstens 4 verschiedene Tags je Artikel und Ort.
   Standard: sauber (glänzend), schmutzig (ockerfarbenes Pflegeetikett), verloren (indigo), beschädigt (grau). Weitere Tags über „+“.
-  In der Bestandsliste zeigen kleine Kreise je Ort nur die dort aktiven Tags mit ihrer Stückzahl.
+  In der Bestandsliste zeigen kleine Kreise je Ort nur die dort aktiven Tags mit ihrer Stückzahl (der Kreis wächst mit der
+  Stellenzahl); Stücke ohne Tag zeigt ein transparenter Kreis mit dünnem Rand.
+  **Die Gesamtmenge ist der Master:** Die Tag-Mengen ergeben nie mehr als die Gesamtmenge, Tag-Änderungen lassen sie unverändert.
+  **Tag-Verknüpfungen** (Mehr → Tag-Verknüpfungen, Standard: sauber ⇄ schmutzig): Erhöht man „schmutzig“ um 1, sinkt „sauber“
+  um 1 und umgekehrt. Andere Tags nehmen zuerst Stücke ohne Tag, dann vom größten anderen Tag.
 - **Menge** je Ort per Stepper (− / + / Zahl antippen für Zahlenfeld, gedrückt halten für Wiederholung).
 - **Transporte = Kisten:** Artikel direkt vom Artikel oder aus dem Transport-Bereich in eine Kiste legen →
   abschicken (danach gesperrt, Bestand am Start sinkt) → Ankunft bestätigen (Bestand am Ziel steigt, Tags werden übernommen).
