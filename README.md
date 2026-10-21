@@ -28,6 +28,10 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
   das **Wetter** (aktuell, nächste 3 Stunden, morgen, Sonnenauf-/untergang, Zeitpunkt der Abfrage) und die Widget-Karte.
 - **Gruppenfarbe:** Der Balken an den Gruppen ist standardmäßig Subway-Grün und wechselt automatisch, wenn ein Ort Grün nutzt.
   Unter *Mehr → Gruppenfarbe* lässt sich eine eigene Farbe wählen (hat Vorrang), „Automatisch“ stellt zurück.
+- **Kisten benennen:** Beim Anlegen einer Kiste (Neue Kiste, Transport-Bereich, „In Kiste“) stehen *Kiste 1* und *Kiste 2* zur Auswahl
+  (sie ersetzen die freie Eingabe). Bei freier Eingabe schlägt die App bereits genutzte Namen passend zu den getippten Buchstaben vor.
+- **Suchvorschläge:** In den Suchfeldern von Start und Bestand erscheinen frühere Suchanfragen (mit Treffern) passend zu den getippten Buchstaben.
+- **Pfeil:** Wie auf den Schildern der Vorlage: kurzer dicker Schaft, dicker Winkel als Spitze, scharfe Ecken (`ARROW_PATH` in `js/ui.js`).
 - **Update-Meldungen:** „Neue Version verfügbar“ und nach der Installation „Update abgeschlossen. Sie arbeiten jetzt in Version x.“
 - **Wetter:** DWD über [Bright Sky](https://brightsky.dev); außerhalb Deutschlands automatisch MET Norway (api.met.no).
   Der Standort eines Ortes wird unter *Mehr → Orte → Ort bearbeiten → Standort & Wetter einstellen* per Adresse, Ort,

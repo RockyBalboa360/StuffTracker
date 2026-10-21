@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.8.0';
+export const VERSION = '0.9.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 16 };
 
 let data = null;
@@ -480,8 +480,34 @@ export function deleteTag(id) {
 }
 
 /* ---------- Transporte ---------- */
+/** Bereits genutzte Kistennamen (zuletzt verwendete zuerst, dazu die Namen vorhandener Kisten). */
+export function boxNames() {
+  const seen = new Set(); const out = [];
+  for (const n of [...(data.settings.boxNames || []), ...data.transports.map((x) => x.name)]) {
+    const s = String(n || '').trim(); const k = s.toLowerCase();
+    if (s && !seen.has(k)) { seen.add(k); out.push(s); }
+  }
+  return out;
+}
+function rememberBoxName(name) {
+  const list = (data.settings.boxNames ||= []).filter((x) => x.toLowerCase() !== name.toLowerCase());
+  list.unshift(name);
+  data.settings.boxNames = list.slice(0, 40);
+}
+/** Frühere Suchanfragen (Start und Bestand) für die Vorschläge beim Tippen. Ändert nur den Speicher, kein Neuzeichnen. */
+export const searchHistory = () => data.settings.searchHistory || [];
+export function addSearch(q) {
+  q = String(q || '').trim();
+  if (q.length < 2) return;
+  const list = (data.settings.searchHistory || []).filter((x) => x.toLowerCase() !== q.toLowerCase());
+  list.unshift(q);
+  data.settings.searchHistory = list.slice(0, 30);
+  scheduleSave();
+}
+
 export function createTransport({ from, to, name }) {
   return mutate(() => {
+    if (name) rememberBoxName(name);
     data.settings.boxCounter = (data.settings.boxCounter || 0) + 1;
     const tr = {
       id: uid(), name: name || `${t('box')} ${data.settings.boxCounter}`,

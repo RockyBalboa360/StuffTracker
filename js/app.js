@@ -7,6 +7,7 @@ import { renderStock, refreshStock, afterStock } from './views/stock.js';
 import { renderTransport } from './views/transport.js';
 import { renderSettings } from './views/settings.js';
 import './views/item.js';
+import './suggest.js';
 import { isDaytime } from './sun.js';
 
 const TABS = {

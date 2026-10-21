@@ -55,10 +55,55 @@ actions['tr-seg'] = (el) => { ui.seg = el.dataset.s; window.dispatchEvent(new Ev
 actions['tr-open'] = (el) => openTransport(el.dataset.id);
 actions['tr-new'] = () => openTransportForm();
 
+/* ================= Name der Kiste ================= */
+/** Zwei Standardnamen zur Auswahl (sie ersetzen die freie Eingabe, nochmal tippen hebt die Wahl auf). */
+export const boxPresets = () => [`${t('box')} 1`, `${t('box')} 2`];
+
+/** HTML des Namensfelds; st = { choice: '' | Standardname, name: freier Text }. */
+export function boxNameHtml(st) {
+  return `<div class="lbl">${t('boxName')}</div>
+    <div class="chips">${boxPresets().map((n) => `<button type="button" class="chip ${st.choice === n ? 'on' : ''}" data-bn="preset" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+    <input id="bn-input" class="field bn-input" type="text" maxlength="40" autocomplete="off" placeholder="${t(st.choice ? 'boxNameChosen' : 'boxNamePh')}" value="${st.choice ? '' : esc(st.name || '')}" ${st.choice ? 'disabled' : ''}>
+    <div class="chips sugg-inline" id="bn-sugg"></div>`;
+}
+/** Der gewählte Name: Standardname oder freie Eingabe (leer = die App vergibt „Kiste n“). */
+export const boxNameValue = (st) => st.choice || (st.name || '').trim();
+
+/** Schaltet das Namensfeld scharf (einmal je Sheet): Auswahl-Chips und Vorschläge aus bereits genutzten Namen. */
+export function bindBoxName(h, st) {
+  const input = () => h.el.querySelector('#bn-input');
+  const suggest = () => {
+    const box = h.el.querySelector('#bn-sugg');
+    if (!box) return;
+    const q = (st.name || '').trim().toLowerCase();
+    const words = (s) => s.toLowerCase().split(/\s+/);
+    const hits = !q || st.choice ? [] : store.boxNames().filter((n) => n.toLowerCase() !== q && (n.toLowerCase().startsWith(q) || words(n).some((w) => w.startsWith(q)))).slice(0, 5);
+    box.innerHTML = hits.map((n) => `<button type="button" class="chip chip--sugg" data-bn="pick" data-v="${esc(n)}">${esc(n)}</button>`).join('');
+  };
+  h.el.addEventListener('input', (e) => { if (e.target.id === 'bn-input') { st.name = e.target.value; suggest(); } });
+  h.el.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-bn="pick"]')) e.preventDefault(); });
+  h.el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bn]');
+    if (!b) return;
+    const v = b.dataset.v;
+    if (b.dataset.bn === 'preset') {
+      st.choice = st.choice === v ? '' : v;
+      h.el.querySelectorAll('[data-bn="preset"]').forEach((c) => c.classList.toggle('on', c.dataset.v === st.choice));
+      const inp = input();
+      inp.disabled = !!st.choice;
+      inp.value = st.choice ? '' : (st.name || '');
+      inp.placeholder = t(st.choice ? 'boxNameChosen' : 'boxNamePh');
+    } else {
+      st.name = v; input().value = v;
+    }
+    suggest();
+  });
+}
+
 /* ================= Neuer Transport ================= */
 export function openTransportForm(preFrom) {
   const ps = store.places();
-  const st = { from: preFrom || store.currentPlaceId(), to: null };
+  const st = { from: preFrom || store.currentPlaceId(), to: null, choice: '', name: '' };
   st.to = ps.find((p) => p.id !== st.from)?.id;
   const h = openSheet({
     title: t('trNew'),
@@ -68,24 +113,19 @@ export function openTransportForm(preFrom) {
       <div class="chips">${ps.map((p) => `<button type="button" class="chip chip--badge ${p.id === st.from ? 'on' : ''}" data-act="tf-from" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
       <div class="lbl">${t('to')}</div>
       <div class="chips">${ps.filter((p) => p.id !== st.from).map((p) => `<button type="button" class="chip chip--badge ${p.id === st.to ? 'on' : ''}" data-act="tf-to" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
-      <label class="lbl" for="tf-name">${t('boxName')}</label>
-      <input id="tf-name" class="field" type="text" maxlength="40" placeholder="${t('boxNamePh')}">`,
+      ${boxNameHtml(st)}`,
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="tf-ok">${icon('box')} ${t('create')}</button>`,
     actions: {
-      'tf-from': (el) => { st.from = el.dataset.id; if (st.to === st.from) st.to = ps.find((p) => p.id !== st.from).id; keep(); h.redraw(); },
-      'tf-to': (el) => { st.to = el.dataset.id; keep(); h.redraw(); },
+      'tf-from': (el) => { st.from = el.dataset.id; if (st.to === st.from) st.to = ps.find((p) => p.id !== st.from).id; h.redraw(); },
+      'tf-to': (el) => { st.to = el.dataset.id; h.redraw(); },
       'tf-ok': () => {
-        const tr = store.createTransport({ from: st.from, to: st.to, name: h.el.querySelector('#tf-name').value.trim() });
+        const tr = store.createTransport({ from: st.from, to: st.to, name: boxNameValue(st) });
         closeSheet();
         setTimeout(() => openTransport(tr.id), 260);
       },
     },
   });
-  let name = '';
-  function keep() { name = h.el.querySelector('#tf-name').value; }
-  h.el.addEventListener('transitionend', () => {}, { once: true });
-  const orig = h.redraw;
-  h.redraw = () => { orig(); h.el.querySelector('#tf-name').value = name; };
+  bindBoxName(h, st);
 }
 
 /* ================= Detail ================= */

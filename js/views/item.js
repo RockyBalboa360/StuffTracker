@@ -6,6 +6,7 @@ import {
   toast, confirmDialog, PALETTE, arrow,
 } from '../ui.js';
 import { pickPhoto } from '../photo.js';
+import { boxNameHtml, boxNameValue, bindBoxName } from './transport.js';
 
 stepHandlers['local-qty'] = (_a, v) => { const s = topSheet(); if (s) s.qty = v; };
 stepHandlers['item-qty'] = (a, v) => store.setQty(a.item, a.place, v);
@@ -197,7 +198,7 @@ export function openMove(itemId, placeId) {
   const others = store.places().filter((p) => p.id !== placeId);
   const drafts = store.transports().filter((x) => x.status === 'draft' && x.from === placeId);
   const free = store.freeTags(it, placeId);
-  const st = { sel: drafts[0]?.id || 'new', dest: others[0]?.id, qty: 1, name: '', manual: false, alloc: store.defaultAlloc(it, placeId, 1) };
+  const st = { sel: drafts[0]?.id || 'new', dest: others[0]?.id, qty: 1, name: '', choice: '', manual: false, alloc: store.defaultAlloc(it, placeId, 1) };
   const total = (o) => Object.values(o).reduce((a, b) => a + b, 0);
   const tagRows = () => {
     const rows = store.tags().filter((g) => free[g.id] > 0);
@@ -224,15 +225,14 @@ export function openMove(itemId, placeId) {
       ${st.sel === 'new' ? `
         <div class="lbl">${t('destination')}</div>
         <div class="chips">${others.map((p) => `<button type="button" class="chip chip--badge ${p.id === st.dest ? 'on' : ''}" data-act="mv-dest" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
-        <label class="lbl" for="mv-name">${t('boxName')}</label>
-        <input id="mv-name" class="field" type="text" maxlength="40" placeholder="${t('boxNamePh')}" value="${esc(st.name)}">` : ''}`,
+        ${boxNameHtml(st)}` : ''}`,
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="mv-ok">${icon('box')} ${t('toBox')}</button>`,
     actions: {
       'mv-sel': (el) => { st.sel = el.dataset.id; redraw(); },
       'mv-dest': (el) => { st.dest = el.dataset.id; h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el)); },
       'mv-ok': () => {
         const q = Math.min(st.qty, avail);
-        const name = h.el.querySelector('#mv-name')?.value.trim();
+        const name = boxNameValue(st);
         let tid = st.sel;
         if (tid === 'new') tid = store.createTransport({ from: placeId, to: st.dest, name }).id;
         if (!store.addLine(tid, itemId, q, { ...st.alloc })) { toast(t('nothingFree'), 'warn'); return; }
@@ -241,8 +241,8 @@ export function openMove(itemId, placeId) {
       },
     },
   });
+  bindBoxName(h, st);
   function redraw() {
-    st.name = h.el.querySelector('#mv-name')?.value ?? st.name;
     h.redraw();
   }
   h.onQty = (v) => {
