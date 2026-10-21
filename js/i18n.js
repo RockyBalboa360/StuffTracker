@@ -75,11 +75,16 @@ const de = {
   /* Standardgruppen / -tags */
   'group.outer': 'Oberbekleidung', 'group.base': 'Base Layer', 'group.third': 'Third Layer', 'group.under': 'Unterwäsche', 'group.sport': 'Sportwäsche',
   'group.shoes': 'Schuhe', 'group.supp': 'Supplements', 'group.cables': 'Kabel', 'group.bags': 'Taschen', 'group.outdoor': 'Outdoor-Equipment',
-  'tag.clean': 'sauber', 'tag.dirty': 'schmutzig', 'tag.lost': 'verloren',
+  'tag.clean': 'sauber', 'tag.dirty': 'schmutzig', 'tag.lost': 'verloren', 'tag.damaged': 'beschädigt',
+  'group.second': 'Second Layer', 'group.acc': 'Accessoires', 'group.it': 'IT & Elektronik',
+  collapseAll: 'Alle zuklappen', expandAll: 'Alle aufklappen',
+  minShortTag: 'Min. {n} {tag}', minTag: 'Nur Stücke mit Tag zählen (optional)',
+  minTagHint: 'Beispiel: Mindestbestand 3 mit Tag „sauber“ warnt, sobald weniger als 3 saubere Stücke da sind – auch wenn insgesamt mehr (z. B. schmutzige) vorhanden sind.',
+  minTagNone: 'Alle Stücke',
   /* Beispielartikel */
   'sample.jeans': 'Blue Jeans', 'sample.tshirt': 'T-Shirt', 'sample.longsleeve': 'Langarmshirt', 'sample.fleece': 'Fleecejacke', 'sample.shell': 'Hardshelljacke',
   'sample.socks': 'Socken', 'sample.runshirt': 'Laufshirt', 'sample.boots': 'Wanderschuhe', 'sample.magnesium': 'Magnesium', 'sample.cable': 'USB-C-Kabel',
-  'sample.backpack': 'Rucksack', 'sample.headlamp': 'Stirnlampe',
+  'sample.backpack': 'Rucksack', 'sample.headlamp': 'Stirnlampe', 'sample.beanie': 'Mütze',
 };
 
 const en = {
@@ -152,10 +157,15 @@ const en = {
   'csv.item': 'Item', 'csv.group': 'Group', 'csv.place': 'Place', 'csv.qty': 'Quantity', 'csv.tags': 'Tags', 'csv.min': 'Minimum',
   'group.outer': 'Outerwear', 'group.base': 'Base layer', 'group.third': 'Third layer', 'group.under': 'Underwear', 'group.sport': 'Sportswear',
   'group.shoes': 'Shoes', 'group.supp': 'Supplements', 'group.cables': 'Cables', 'group.bags': 'Bags', 'group.outdoor': 'Outdoor gear',
-  'tag.clean': 'clean', 'tag.dirty': 'dirty', 'tag.lost': 'lost',
+  'tag.clean': 'clean', 'tag.dirty': 'dirty', 'tag.lost': 'lost', 'tag.damaged': 'damaged',
+  'group.second': 'Second layer', 'group.acc': 'Accessories', 'group.it': 'IT & electronics',
+  collapseAll: 'Collapse all', expandAll: 'Expand all',
+  minShortTag: 'Min. {n} {tag}', minTag: 'Count only pieces with tag (optional)',
+  minTagHint: 'Example: minimum 3 with tag “clean” warns as soon as fewer than 3 clean pieces are left – even if more (e.g. dirty ones) exist in total.',
+  minTagNone: 'All pieces',
   'sample.jeans': 'Blue jeans', 'sample.tshirt': 'T-shirt', 'sample.longsleeve': 'Long-sleeve shirt', 'sample.fleece': 'Fleece jacket', 'sample.shell': 'Hardshell jacket',
   'sample.socks': 'Socks', 'sample.runshirt': 'Running shirt', 'sample.boots': 'Hiking boots', 'sample.magnesium': 'Magnesium', 'sample.cable': 'USB-C cable',
-  'sample.backpack': 'Backpack', 'sample.headlamp': 'Headlamp',
+  'sample.backpack': 'Backpack', 'sample.headlamp': 'Headlamp', 'sample.beanie': 'Beanie',
 };
 
 const D = { de, en };

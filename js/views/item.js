@@ -39,7 +39,7 @@ function placeCard(it, p) {
     <div class="pcard-actions">
       ${qty > 0 ? `<button class="btn btn--sm" type="button" data-act="item-move" data-item="${it.id}" data-place="${p.id}">${icon('box', 18)} ${t('toBox')}</button>
       <button class="btn btn--sm" type="button" data-act="item-retire" data-item="${it.id}" data-place="${p.id}">${icon('ban', 18)} ${t('retire')}</button>` : ''}
-      <button class="btn btn--sm ${e?.min?.on ? 'btn--on' : ''}" type="button" data-act="item-min" data-item="${it.id}" data-place="${p.id}">${icon('bell', 18)} ${e?.min?.on ? t('minShort', { n: e.min.v }) : t('minSet')}</button>
+      <button class="btn btn--sm ${e?.min?.on ? 'btn--on' : ''}" type="button" data-act="item-min" data-item="${it.id}" data-place="${p.id}">${icon('bell', 18)} ${e?.min?.on ? store.minLabel(e) : t('minSet')}</button>
     </div>
   </section>`;
 }
@@ -288,19 +288,25 @@ export function openRetire(itemId, placeId) {
 /* ================= Mindestbestand ================= */
 export function openMin(itemId, placeId) {
   const e = store.item(itemId).stock[placeId];
-  const st = { on: !!e?.min?.on };
+  const st = { on: !!e?.min?.on, tag: store.minTagId(e) };
   const h = openSheet({
     title: t('minTitle'),
-    cls: 'sheet--small',
     render: (hh) => `
       <p class="hint">${t('minHint')}</p>
       <button type="button" class="switch ${st.on ? 'on' : ''}" data-act="mn-toggle" role="switch" aria-checked="${st.on}"><i></i><span>${t('minActive')}</span></button>
       <div class="lbl">${t('minValue')}</div>
-      <div class="pad">${stepper({ value: hh.qty ?? e?.min?.v ?? 1, min: 0, on: 'local-qty' })}</div>`,
+      <div class="pad">${stepper({ value: hh.qty ?? e?.min?.v ?? 1, min: 0, on: 'local-qty' })}</div>
+      <div class="lbl">${t('minTag')}</div>
+      <p class="hint">${t('minTagHint')}</p>
+      <div class="chips">
+        <button type="button" class="chip ${st.tag ? '' : 'on'}" data-act="mn-tag" data-id="">${t('minTagNone')}</button>
+        ${store.tags().map((g) => tagChip(g, { on: st.tag === g.id, act: 'mn-tag', attrs: `data-id="${g.id}"` })).join('')}
+      </div>`,
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="mn-ok">${icon('check')} ${t('save')}</button>`,
     actions: {
       'mn-toggle': () => { st.on = !st.on; h.redraw(); },
-      'mn-ok': () => { store.setMin(itemId, placeId, st.on, h.qty ?? 1); closeSheet(); },
+      'mn-tag': (el) => { st.tag = el.dataset.id && st.tag !== el.dataset.id ? el.dataset.id : null; h.redraw(); },
+      'mn-ok': () => { store.setMin(itemId, placeId, st.on, h.qty ?? 1, st.tag); closeSheet(); },
     },
   });
   h.qty = e?.min?.v ?? 1;

@@ -54,21 +54,21 @@ export function renderHome() {
 
   const section = (title, list, extra = '') => (list.length ? `<h2 class="h2">${title}</h2><div class="list">${list.map(transportCard).join('')}${extra}</div>` : '');
 
-  return `<header class="sign sign--hero">
+  return `<nav class="netbar" aria-label="${t('places')}">${net}</nav>
+    <header class="sign sign--hero">
       <div class="sign-kicker"><span>${t('station')} · ${esc(date)}</span>
         ${toStock ? `<button class="chg" type="button" data-act="place-switch">${isDefault ? (auto ? icon('gps', 16) : icon('pin', 16)) : icon('pin', 16)} ${t('change')}</button>` : ''}</div>
-      <div class="hero-row"><h1>${esc(p.name)}</h1>${badge(p, 'xl')}</div>
-      <div class="netmap">${net}</div>
+      <div class="hero-row"><h1 class="${p.name.length > 11 ? 'h1-long' : ''}">${esc(p.name)}</h1>${badge(p, 'xl')}</div>
     </header>
     <div class="stats">
       <div class="stat"><b>${total}</b><span>${t('pieces')}</span></div>
-      <div class="stat"><b>${here.length}</b><span>${t('articles')}</span></div>
+      <button class="stat stat--link" type="button" data-act="home-stock" data-p="${pid}"><b>${here.length}</b><span>${t('articles')} ${icon('transport', 14)}</span></button>
       <div class="stat ${lows.length ? 'bad' : ''}"><b>${lows.length}</b><span>${t('warnings')}</span></div>
     </div>
     ${lows.length ? `<h2 class="h2 h2--warn">${icon('alert', 18)} ${t('lowStock')}</h2>
       <div class="list">${lows.map(({ item, entry }) => `<button class="row row--low" type="button" data-act="item-open" data-item="${item.id}">
-        <span class="row-main"><b>${esc(store.nm(item))}</b><span class="muted">${t('minShort', { n: entry.min.v })}</span></span>
-        <span class="row-qty low">${icon('alert', 16)}<b>${entry.qty}</b></span></button>`).join('')}</div>` : ''}
+        <span class="row-main"><b>${esc(store.nm(item))}</b><span class="muted">${store.minLabel(entry)}</span></span>
+        <span class="row-qty low">${icon('alert', 16)}<b>${store.minCount(entry)}</b></span></button>`).join('')}</div>` : ''}
     ${section(`${t('incoming')} → ${esc(p.name)}`, incoming)}
     ${section(t('outgoing'), outgoing)}
     ${section(t('seg.draft'), drafts)}
@@ -77,7 +77,7 @@ export function renderHome() {
 }
 
 /** Ort-Buttons: je nach Einstellung Dashboard dieses Ortes oder dessen Bestandsliste. */
-actions['home-place'] = (el) => {
+/** Kachel 
   if (store.settings().homeButtons === 'stock') { ui.place = el.dataset.p; location.hash = '#/stock'; return; }
   ui.homePlace = el.dataset.p;
   window.dispatchEvent(new Event('st:render'));

@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 4, tagsTotal: 16 };
 
 let data = null;
@@ -45,6 +45,30 @@ function migrate(d) {
     d.items.forEach((it) => Object.values(it.stock).forEach((e) => { e.tags = e.qty > 0 ? toCounts(e.tags, e.qty) : {}; }));
     d.transports.forEach((tr) => tr.lines.forEach((l) => { l.tags = toCounts(l.tags, l.qty); }));
     d.v = 2;
+  }
+  if (d.v < 3) {
+    // v3: Tag „beschädigt“, neue Standardgruppen, Ort „Hütte“ -> „Pendlerwohnung“
+    if (!d.tags.some((g) => g.id === 'tg_damaged')) {
+      const i = d.tags.findIndex((g) => g.id === 'tg_lost');
+      d.tags.splice(i >= 0 ? i + 1 : d.tags.length, 0, { id: 'tg_damaged', key: 'tag.damaged', style: 'damaged' });
+    }
+    const addGroup = (after, key) => {
+      if (d.groups.some((g) => g.id === `g_${key}`)) return;
+      const i = d.groups.findIndex((g) => g.id === after);
+      d.groups.splice(i >= 0 ? i + 1 : d.groups.length, 0, { id: `g_${key}`, key: `group.${key}` });
+    };
+    addGroup('g_base', 'second'); addGroup('g_supp', 'acc'); addGroup('g_acc', 'it');
+    const remap = { g_outer: 'g_second', g_under: 'g_base', g_shoes: 'g_outdoor', g_cables: 'g_it' };
+    d.items.forEach((it) => { if (it.sample && remap[it.groupId] && d.groups.some((g) => g.id === remap[it.groupId])) it.groupId = remap[it.groupId]; });
+    Object.keys(remap).forEach((id) => {
+      const g = d.groups.find((x) => x.id === id);
+      if (g?.key && !d.items.some((it) => it.groupId === id)) d.groups = d.groups.filter((x) => x !== g);
+    });
+    d.places.forEach((p) => {
+      if (p.name === 'Hütte') p.name = 'Pendlerwohnung';
+      else if (p.name === 'Cabin') p.name = 'Commuter flat';
+    });
+    d.v = 3;
   }
   d.settings.homeButtons ||= 'dashboard';
   return d;
@@ -122,15 +146,25 @@ export function inTransit(itemId) {
   return n;
 }
 
+/** Tag, auf den sich der Mindestbestand bezieht (optionale „und“-Verknüpfung), sonst null. */
+export const minTagId = (e) => (e?.min?.tag && data.tags.some((g) => g.id === e.min.tag) ? e.min.tag : null);
+/** Stückzahl, die gegen den Mindestbestand zählt: nur Stücke mit dem Tag, sonst der Gesamtbestand am Ort. */
+export const minCount = (e) => { const g = minTagId(e); return g ? (e.tags[g] || 0) : e.qty; };
+export function minLabel(e) {
+  const g = minTagId(e);
+  return g ? t('minShortTag', { n: e.min.v, tag: nm(tag(g)) }) : t('minShort', { n: e.min.v });
+}
+const lowEntry = (e) => !!(e && e.min?.on && minCount(e) < e.min.v);
+
 export function lowStock(pid) {
   const out = [];
   for (const it of data.items) {
     const e = it.stock[pid];
-    if (e && e.min?.on && e.qty < e.min.v) out.push({ item: it, entry: e });
+    if (lowEntry(e)) out.push({ item: it, entry: e });
   }
   return out;
 }
-export const isLow = (it, pid) => { const e = it.stock[pid]; return !!(e && e.min?.on && e.qty < e.min.v); };
+export const isLow = (it, pid) => lowEntry(it.stock[pid]);
 
 export function currentPlaceId() {
   const s = data.settings;
@@ -167,7 +201,7 @@ function normalize(e) {
   }
 }
 function ensureEntry(it, pid) {
-  return (it.stock[pid] ||= { qty: 0, tags: {}, min: { on: false, v: 1 } });
+  return (it.stock[pid] ||= { qty: 0, tags: {}, min: { on: false, v: 1, tag: null } });
 }
 function addTagCounts(e, incoming) {
   for (const [k, n] of Object.entries(incoming || {})) {
@@ -283,8 +317,8 @@ export function retire(itemId, pid, qty, reason, note) {
   });
 }
 export const retiredFor = (itemId) => data.retired.filter((r) => r.itemId === itemId);
-export function setMin(itemId, pid, on, v) {
-  mutate(() => { const e = ensureEntry(item(itemId), pid); e.min = { on, v: Math.max(0, Math.floor(v) || 0) }; });
+export function setMin(itemId, pid, on, v, tagId = null) {
+  mutate(() => { const e = ensureEntry(item(itemId), pid); e.min = { on, v: Math.max(0, Math.floor(v) || 0), tag: tagId || null }; });
 }
 
 /* ---------- Orte ---------- */
@@ -340,7 +374,10 @@ export function updateTag(id, patch) {
 export function deleteTag(id) {
   mutate(() => {
     data.tags = data.tags.filter((g) => g.id !== id);
-    data.items.forEach((it) => Object.values(it.stock).forEach((e) => { delete e.tags[id]; }));
+    data.items.forEach((it) => Object.values(it.stock).forEach((e) => {
+      delete e.tags[id];
+      if (e.min?.tag === id) e.min.tag = null;
+    }));
     data.transports.forEach((tr) => tr.lines.forEach((l) => { if (l.tags) delete l.tags[id]; }));
   });
 }
@@ -499,17 +536,18 @@ const DAY = 86400000;
 const isoDay = (offset) => new Date(Date.now() + offset * DAY).toISOString().slice(0, 10);
 
 function seed(lang, empty = false) {
-  const names = lang === 'en' ? ['Home', 'Office', 'Cabin'] : ['Wohnung', 'Büro', 'Hütte'];
+  const names = lang === 'en' ? ['Home', 'Office', 'Commuter flat'] : ['Wohnung', 'Büro', 'Pendlerwohnung'];
   const pl = names.map((name) => ({ id: uid(), name }));
-  const groups = ['outer', 'base', 'third', 'under', 'sport', 'shoes', 'supp', 'cables', 'bags', 'outdoor']
+  const groups = ['base', 'second', 'third', 'sport', 'supp', 'acc', 'it', 'bags', 'outdoor']
     .map((k) => ({ id: 'g_' + k, key: 'group.' + k }));
   const tg = [
     { id: 'tg_clean', key: 'tag.clean', style: 'clean' },
     { id: 'tg_dirty', key: 'tag.dirty', style: 'dirty' },
     { id: 'tg_lost', key: 'tag.lost', style: 'lost' },
+    { id: 'tg_damaged', key: 'tag.damaged', style: 'damaged' },
   ];
   const d = {
-    v: 2,
+    v: 3,
     settings: {
       lang: 'auto', theme: 'auto', placeMode: 'auto', manualPlace: null, lastPlace: null, lastGeo: null,
       homeButtons: 'dashboard', boxCounter: 0, sampleCleared: empty,
@@ -527,17 +565,18 @@ function seed(lang, empty = false) {
     d.items.push(it);
     return it;
   };
-  const C = 'tg_clean', D_ = 'tg_dirty', L = 'tg_lost';
-  mk('sample.jeans', 'outer', { 0: [3, { [C]: 3 }], 1: [1, { [C]: 1 }] });
+  const C = 'tg_clean', D_ = 'tg_dirty', L = 'tg_lost', X = 'tg_damaged';
+  mk('sample.jeans', 'second', { 0: [3, { [C]: 3 }], 1: [1, { [C]: 1 }] });
   const tshirt = mk('sample.tshirt', 'base', { 0: [12, { [C]: 9, [D_]: 3 }], 2: [4, { [D_]: 4 }] });
   mk('sample.longsleeve', 'base', { 0: [4, { [C]: 3, [D_]: 1 }], 2: [2, { [C]: 2 }] });
   mk('sample.fleece', 'third', { 2: [2, { [C]: 2 }] });
   mk('sample.shell', 'third', { 0: [1, { [C]: 1 }], 2: [2, { [D_]: 1, [L]: 1 }] });
-  const socks = mk('sample.socks', 'under', { 0: [10, { [C]: 10 }], 1: [3, { [C]: 3 }], 2: [2, { [D_]: 2 }] });
+  const socks = mk('sample.socks', 'base', { 0: [10, { [C]: 10 }], 1: [3, { [C]: 3 }], 2: [2, { [D_]: 2 }] });
   mk('sample.runshirt', 'sport', { 0: [6, { [C]: 6 }], 1: [2, { [D_]: 2 }] });
-  mk('sample.boots', 'shoes', { 2: [1, { [D_]: 1 }], 0: [1, { [C]: 1 }] });
+  mk('sample.boots', 'outdoor', { 2: [1, { [D_]: 1 }], 0: [2, { [C]: 1, [X]: 1 }] });
   mk('sample.magnesium', 'supp', { 0: [2, {}, 1] });
-  const cable = mk('sample.cable', 'cables', { 0: [4], 1: [2, {}, 2] });
+  mk('sample.beanie', 'acc', { 0: [2, { [C]: 2 }], 2: [1, { [L]: 1 }] });
+  const cable = mk('sample.cable', 'it', { 0: [4], 1: [2, {}, 2] });
   mk('sample.backpack', 'bags', { 0: [1, [C]] });
   mk('sample.headlamp', 'outdoor', { 2: [1] });
 

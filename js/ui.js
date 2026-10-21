@@ -29,6 +29,8 @@ const P = {
   up: '<path d="M6 15l6-6 6 6"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
   gps: '<circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
+  collapse: '<path d="M7 4l5 5 5-5M7 20l5-5 5 5"/>',
+  expand: '<path d="M7 9l5-5 5 5M7 15l5 5 5-5"/>',
   bell: '<path d="M6 17V11a6 6 0 1112 0v6l2 2H4zM10 21h4"/>',
 };
 export const icon = (name, size = 22) =>
@@ -78,6 +80,12 @@ export function tagChip(tg, { on = true, act = '', attrs = '', small = false, co
   const cls = `tag tag--${style} ${on ? 'on' : 'off'} ${small ? 'tag--sm' : ''}`;
   const tag = act ? 'button' : 'span';
   return `<${tag} class="${cls}" style="--tc:${color};--tt:${dark ? '#111' : '#fff'}" ${act ? `data-act="${act}" type="button"` : ''} ${attrs}><i></i>${esc(store.nm(tg))}${count != null ? `<em>${count}</em>` : ''}</${tag}>`;
+}
+/** Kleiner Kreis in der Tag-Farbe, nur mit der Stückzahl (Bestandsliste). */
+export function tagDot(tg, n) {
+  const color = tg.color || MTA.grey;
+  const dark = tg.style === 'plain' && color.toLowerCase() === MTA.yellow.toLowerCase();
+  return `<span class="tdot tdot--${tg.style}" style="--tc:${color};--tt:${dark ? '#111' : '#fff'}" title="${esc(store.nm(tg))}" aria-label="${esc(store.nm(tg))}: ${n}">${n}</span>`;
 }
 /** Tag-Etiketten mit Stückzahl für einen Bestandseintrag ({tagId: anzahl}). */
 export function tagCountChips(tags, small = true) {

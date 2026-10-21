@@ -11,12 +11,14 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
 - **Artikel in Gruppen** (zwei Ebenen), Foto als kleines Vorschaubild (Kamera oder Galerie).
 - **Tags** als Etiketten zum Antippen. Ein Tag zählt **Stückzahlen**: Langarmshirt in „Wohnung“, Bestand 4, davon
   3 sauber und 1 schmutzig – der Artikel steht nur einmal in der Liste. Höchstens 4 verschiedene Tags je Artikel und Ort.
-  Standard: sauber (glänzend), schmutzig (ockerfarbenes Pflegeetikett mit Flecken), verloren. Weitere Tags über „+“.
+  Standard: sauber (glänzend), schmutzig (ockerfarbenes Pflegeetikett), verloren (indigo), beschädigt (grau). Weitere Tags über „+“.
+  In der Bestandsliste zeigen kleine Kreise je Ort nur die dort aktiven Tags mit ihrer Stückzahl.
 - **Menge** je Ort per Stepper (− / + / Zahl antippen für Zahlenfeld, gedrückt halten für Wiederholung).
 - **Transporte = Kisten:** Artikel direkt vom Artikel oder aus dem Transport-Bereich in eine Kiste legen →
   abschicken (danach gesperrt, Bestand am Start sinkt) → Ankunft bestätigen (Bestand am Ziel steigt, Tags werden übernommen).
   Mehrere Kisten gleichzeitig in alle Richtungen, mit Startdatum. Abbrechen bucht zurück.
-- **Aussondern** (defekt / entsorgt / verschlissen) mit Protokoll, **Mindestbestand** je Artikel und Ort mit Warnung.
+- **Aussondern** (defekt / entsorgt / verschlissen) mit Protokoll, **Mindestbestand** je Artikel und Ort mit Warnung,
+  optional nur für Stücke mit einem Tag (z. B. mindestens 3 *saubere*; der Gesamtbestand darf höher sein).
 - **Start-Dashboard:** In den Einstellungen wählen: automatisch der Ort, an dem sich das Handy befindet (Standort,
   400 m Radius), oder ein fester Ort. Die Ort-Buttons auf der Startseite zeigen standardmäßig das Dashboard des Ortes;
   optional führen sie direkt zur Bestandsliste, dann erscheint oben rechts „Ort wechseln“.

@@ -1,7 +1,7 @@
 // Bestand: Gruppen -> Artikel, Ortsfilter, Suche.
 import { t } from '../i18n.js';
 import * as store from '../store.js';
-import { esc, icon, badge, tagCountChips, thumb, actions, ui } from '../ui.js';
+import { esc, icon, badge, tagDot, thumb, actions, ui } from '../ui.js';
 
 const selPlace = () => ui.place || store.currentPlaceId();
 
@@ -14,30 +14,35 @@ function haystack(it) {
   return parts.join(' ').toLowerCase();
 }
 
+/** Je Ort: Symbol, Gesamtzahl und kleine Kreise nur für die dort aktiven Tags. */
+function placeStock(it, p) {
+  const e = it.stock[p.id];
+  const dots = store.tagCounts(e.tags).map(([g, n]) => tagDot(g, n)).join('');
+  return `<span class="pq">${badge(p, 'ml')}<i class="pq-n">${e.qty}</i>${dots}</span>`;
+}
+
 function row(it, pid, all) {
-  let qty; let tags = {}; let low = false;
+  let qty; let low = false; let places;
+  const transit = store.inTransit(it.id);
   if (all) {
-    qty = store.totalQty(it);
-    for (const e of Object.values(it.stock)) for (const [k, n] of Object.entries(e.tags)) tags[k] = (tags[k] || 0) + n;
+    qty = store.totalQty(it) + transit;
     low = store.places().some((p) => store.isLow(it, p.id));
+    places = store.places().filter((p) => store.qtyAt(it, p.id) > 0).map((p) => placeStock(it, p)).join('');
   } else {
     const e = it.stock[pid];
-    qty = e?.qty || 0; tags = e?.tags || {}; low = store.isLow(it, pid);
+    qty = e?.qty || 0; low = store.isLow(it, pid);
+    places = e && e.qty > 0 ? placeStock(it, store.place(pid)) : '';
   }
-  const tagHtml = tagCountChips(tags);
-  const places = all
-    ? `<span class="row-places">${store.places().filter((p) => store.qtyAt(it, p.id) > 0)
-      .map((p) => `<span class="pq">${badge(p, 'xs')}<i>${store.qtyAt(it, p.id)}</i></span>`).join('')}</span>` : '';
-  const transit = store.inTransit(it.id);
+  const transitHtml = all && transit > 0
+    ? `<span class="pq pq--transit" title="${t('tab.transport')}"><span class="tbadge">${icon('transport', 18)}</span><i class="pq-n">${transit}</i><em>${t('tab.transport')}</em></span>` : '';
+  const bottom = places + transitHtml;
   return `<button class="row" type="button" data-act="item-open" data-item="${it.id}">
     ${thumb(it, 'md')}
     <span class="row-main"><b>${esc(store.nm(it))}</b>
-      ${tagHtml ? `<span class="row-tags">${tagHtml}</span>` : ''}
-      ${places}</span>
-    <span class="row-qty ${low ? 'low' : ''}">${low ? icon('alert', 16) : ''}<b>${qty}</b>${transit && all ? `<small>+${transit}</small>` : ''}</span>
+      ${bottom ? `<span class="row-places">${bottom}</span>` : ''}</span>
+    <span class="row-qty ${low ? 'low' : ''}">${low ? icon('alert', 16) : ''}<b>${qty}</b></span>
   </button>`;
 }
-
 function listHtml() {
   const q = ui.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const sp = selPlace();
@@ -66,10 +71,17 @@ function listHtml() {
   return html;
 }
 
+/** Schaltfläche „Alle zuklappen / aufklappen“ – zeigt die jeweils sinnvolle Aktion. */
+function allBtn() {
+  const anyOpen = store.groups().some((g) => !ui.collapsed[g.id]);
+  return `<button class="chg" id="grp-all" type="button" data-act="grp-all">${icon(anyOpen ? 'collapse' : 'expand', 16)} ${t(anyOpen ? 'collapseAll' : 'expandAll')}</button>`;
+}
+const syncAllBtn = () => { const b = document.getElementById('grp-all'); if (b) b.outerHTML = allBtn(); };
+
 export function renderStock() {
   const sp = selPlace();
   return `<header class="sign">
-      <h1>${t('tab.stock')}</h1>
+      <div class="sign-kicker sign-kicker--title"><h1>${t('tab.stock')}</h1>${allBtn()}</div>
       <label class="search">${icon('search', 20)}<input id="q" type="search" placeholder="${t('searchPh')}" value="${esc(ui.search)}" autocomplete="off" enterkeyhint="search"></label>
     </header>
     <div class="pchips" role="tablist">
@@ -93,6 +105,14 @@ actions['grp-toggle'] = (el) => {
   ui.collapsed[g] = !ui.collapsed[g];
   const list = document.getElementById('stock-list');
   if (list) list.innerHTML = listHtml();
+  syncAllBtn();
+};
+actions['grp-all'] = () => {
+  const anyOpen = store.groups().some((g) => !ui.collapsed[g.id]);
+  store.groups().forEach((g) => { ui.collapsed[g.id] = anyOpen; });
+  const list = document.getElementById('stock-list');
+  if (list) list.innerHTML = listHtml();
+  syncAllBtn();
 };
 document.addEventListener('input', (e) => {
   if (e.target.id !== 'q') return;
