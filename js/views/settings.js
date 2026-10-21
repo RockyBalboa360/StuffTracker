@@ -7,6 +7,7 @@ import {
 } from '../ui.js';
 import { openTagForm } from './item.js';
 import { geocode, parseCoords, stations } from '../weather.js';
+import { groupAccent } from './stock.js';
 
 const seg = (act, cur, opts) => `<div class="segmented">${opts.map(([v, label]) =>
   `<button type="button" class="${cur === v ? 'on' : ''}" data-act="${act}" data-v="${v}">${label}</button>`).join('')}</div>`;
@@ -16,6 +17,7 @@ export function renderSettings() {
   const w = s.widget;
   const ps = store.places();
   const canAdd = ps.length < store.LIMITS.places;
+  const autoColor = !s.groupColor || s.groupColor === 'auto';
   const srcChips = w.kind === 'group'
     ? store.groups().map((g) => `<button type="button" class="chip ${w.id === g.id ? 'on' : ''}" data-act="wd-src" data-id="${g.id}">${esc(store.nm(g))}</button>`).join('')
     : `<button type="button" class="chip ${w.id === 'current' ? 'on' : ''}" data-act="wd-src" data-id="current">${icon('gps', 16)} ${t('currentPlace')}</button>` +
@@ -76,6 +78,12 @@ export function renderSettings() {
         <button type="button" class="icon-btn" data-act="link-down" data-i="${i}" ${i === all.length - 1 ? 'disabled' : ''} aria-label="down">${icon('down', 20)}</button>
         <button type="button" class="icon-btn icon-btn--danger" data-act="link-del" data-i="${i}" aria-label="${t('delete')}">${icon('trash', 20)}</button></div>`).join('') || `<p class="hint">${t('tagLinksNone')}</p>`}
       <button type="button" class="btn btn--block" data-act="link-add">${icon('plus')} ${t('linkAdd')}</button></section>
+
+    <section class="card"><h3>${t('groupColor')}</h3>
+      <p class="hint">${t('groupColorHint')}</p>
+      <div class="gpreview" style="--ga:${groupAccent()}"><span>${esc(t('group.base'))}</span></div>
+      <div class="chips pad"><button type="button" class="chip ${autoColor ? 'on' : ''}" data-act="gc-auto">${icon('refresh', 16)} ${t('groupColorAuto')}</button></div>
+      <div class="swatches">${Object.values(PALETTE).map((c) => `<button type="button" class="swatch ${!autoColor && c.toLowerCase() === groupAccent().toLowerCase() ? 'on' : ''}" style="--sw:${c}" data-act="gc-set" data-c="${c}" aria-label="${c}"></button>`).join('')}</div></section>
 
     <section class="card"><h3>${t('widget')}</h3>
       <p class="hint">${t('widgetHint')}</p>
@@ -373,6 +381,10 @@ actions['link-add'] = () => {
     },
   });
 };
+
+/* ---------- Gruppenfarbe ---------- */
+actions['gc-auto'] = () => store.setSetting('groupColor', 'auto');
+actions['gc-set'] = (el) => store.setSetting('groupColor', el.dataset.c);
 
 /* ---------- Widget ---------- */
 actions['wd-on'] = () => store.setWidget({ on: !store.settings().widget.on });

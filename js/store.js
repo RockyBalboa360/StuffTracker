@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.7.0';
+export const VERSION = '0.8.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 16 };
 
 let data = null;
@@ -210,6 +210,8 @@ export function setGeo(lat, lon) {
 export function setSetting(k, v) { mutate(() => { data.settings[k] = v; }, false); }
 export function setWidget(patch) { mutate(() => { Object.assign(data.settings.widget, patch); }, false); }
 /** Zeitpunkt der letzten Datenänderung (Bestand, Tags, Kisten, Orte …). */
+/** Zeitpunkt der Ankunftsbuchung einer Kiste (ältere Kisten: Ende des gebuchten Ankunftstages). */
+export const arrivedTs = (tr) => tr.arrivedTs || (tr.arrivedAt ? Date.parse(`${tr.arrivedAt}T23:59:59`) : 0);
 export const lastChange = () => data.changed || data.log[0]?.ts || Math.max(0, ...data.items.map((i) => i.createdAt || 0)) || null;
 export const markBackup = () => setSetting('lastBackup', Date.now());
 
@@ -548,7 +550,7 @@ export function arriveTransport(tid, dateISO) {
       addTagCounts(e, l.tags);
       normalize(e);
     }
-    tr.status = 'arrived'; tr.arrivedAt = dateISO;
+    tr.status = 'arrived'; tr.arrivedAt = dateISO; tr.arrivedTs = Date.now();
     addLog('tArrive', { box: tr.name, to: place(tr.to)?.name, n: tr.lines.length });
   });
   return true;

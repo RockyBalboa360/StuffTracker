@@ -20,10 +20,14 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
   Die Reihenfolge der Verknüpfungen ist die Priorität (mit Pfeilen änderbar): Kommt ein Tag in mehreren Verknüpfungen vor,
   wirken die späteren überwiegend nur in eine Richtung.
 - **Startseite** (von oben): Ort-Buttons, Suche über alle Daten (Artikel, Gruppen, Tags, Orte, Kisten), Kopf mit Datum, Datum der
-  letzten Änderung und Ortsname, Hinweis zur Datensicherung (nach mehr als 9 Tagen), Kacheln *Stück gesamt · Artikelarten · Gruppen ·
-  Warnungen* (Linie in der Ortsfarbe; Artikelarten und Gruppen springen in die Bestandsliste) mit Schnellaktionen (neuer Artikel,
-  neue Kiste), Warnungen, Kisten unterwegs/in Vorbereitung, Tag-Übersicht des Ortes, danach das **Wetter** (aktuell, nächste
-  3 Stunden, morgen, Sonnenauf-/untergang, Zeitpunkt der Abfrage) und die Widget-Karte.
+  letzten Änderung und Ortsname, Hinweis zur Datensicherung (nach mehr als 9 Tagen), Kacheln im Schilder-Stil mit Linie in der
+  Ortsfarbe: *Stücke gesamt · Artikel · Gruppen · Warnungen* (mit Schnellaktionen neuer Artikel/neue Kiste). Die Kacheln springen in
+  die Bestandsliste des Ortes: Stücke gesamt und Artikel mit allen Gruppen aufgeklappt, Gruppen mit allen zugeklappt, Warnungen
+  (nur bei aktiver Warnung) nur zu den Gruppen mit Warn-Artikeln, die markiert werden. Darunter Warnungen, Kisten (unterwegs hierher
+  inklusive in den letzten 24 Stunden angekommener Kisten, unterwegs von hier, Versand vorbereiten), Tag-Übersicht des Ortes, danach
+  das **Wetter** (aktuell, nächste 3 Stunden, morgen, Sonnenauf-/untergang, Zeitpunkt der Abfrage) und die Widget-Karte.
+- **Gruppenfarbe:** Der Balken an den Gruppen ist standardmäßig Subway-Grün und wechselt automatisch, wenn ein Ort Grün nutzt.
+  Unter *Mehr → Gruppenfarbe* lässt sich eine eigene Farbe wählen (hat Vorrang), „Automatisch“ stellt zurück.
 - **Update-Meldungen:** „Neue Version verfügbar“ und nach der Installation „Update abgeschlossen. Sie arbeiten jetzt in Version x.“
 - **Wetter:** DWD über [Bright Sky](https://brightsky.dev); außerhalb Deutschlands automatisch MET Norway (api.met.no).
   Der Standort eines Ortes wird unter *Mehr → Orte → Ort bearbeiten → Standort & Wetter einstellen* per Adresse, Ort,

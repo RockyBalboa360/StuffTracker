@@ -36,12 +36,16 @@ const P = {
   expand: '<path d="M7 9l5-5 5 5M7 15l5 5 5-5"/>',
   bell: '<path d="M6 17V11a6 6 0 1112 0v6l2 2H4zM10 21h4"/>',
 };
-export const icon = (name, size = 22) =>
-  `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
+/** Transport-Symbol: der gefüllte Subway-Pfeil (Vorlage „Downtown & Brooklyn“), alle anderen Symbole sind Linien. */
+const TRANSPORT_ICON = '<path d="M1.5 9h12.5V3.5l8.5 8.5-8.5 8.5V15H1.5z"/>';
+export const icon = (name, size = 22) => (name === 'transport'
+  ? `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">${TRANSPORT_ICON}</svg>`
+  : `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`);
 
-/** Richtungspfeil im Stil der NYC-Subway-Schilder: kräftiger Schaft, breite Spitze. */
+/** Richtungspfeil wie auf den NYC-Subway-Schildern: dicker gerader Schaft, Spitze mit rechtem Winkel (gefüllt). */
+const ARROW_PATH = 'M0 12h80V0l20 20-20 20V28H0z';
 export const arrow = (cls = '') =>
-  `<svg class="arrow ${cls}" viewBox="0 0 120 40" aria-hidden="true"><path d="M0 12h82V0l38 20-38 20V28H0z" fill="currentColor"/></svg>`;
+  `<svg class="arrow ${cls}" viewBox="0 0 100 40" aria-hidden="true"><path d="${ARROW_PATH}" fill="currentColor"/></svg>`;
 
 /* ---------- Badges (Linien-Symbole) ---------- */
 const MTA = {
@@ -178,10 +182,12 @@ document.addEventListener('click', (e) => {
 });
 
 /* ---------- Lang/Format ---------- */
-export const fmtDate = (iso) => {
+/** short=true: das aktuelle Jahr entfällt (kürzere Kartenzeilen), andere Jahre bleiben sichtbar. */
+export const fmtDate = (iso, short = false) => {
   if (!iso) return '';
   const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(getLang() === 'de' ? 'de-DE' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const noYear = short && y === new Date().getFullYear();
+  return new Date(y, m - 1, d).toLocaleDateString(getLang() === 'de' ? 'de-DE' : 'en-GB', noYear ? { day: '2-digit', month: 'short' } : { day: '2-digit', month: 'short', year: 'numeric' });
 };
 export const fmtTs = (ts) =>
   new Date(ts).toLocaleString(getLang() === 'de' ? 'de-DE' : 'en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });

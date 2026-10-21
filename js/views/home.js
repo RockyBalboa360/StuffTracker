@@ -212,7 +212,10 @@ export function renderHome() {
   const section = (title, list) => (list.length ? `<h2 class="h2">${title}</h2><div class="list">${list.map(transportCard).join('')}</div>` : '');
 
   const groupsHere = new Set(here.map((it) => it.groupId)).size;
-  const quiet = !incoming.length && !outgoing.length && !drafts.length && !lows.length;
+  // Unterwegs hierher: abgeschickte Kisten plus Kisten, die in den letzten 24 Stunden angekommen sind.
+  const recent = store.transports().filter((x) => x.status === 'arrived' && x.to === pid && Date.now() - store.arrivedTs(x) < 24 * 3600000);
+  const incomingAll = [...incoming, ...recent];
+  const quiet = !incomingAll.length && !outgoing.length && !drafts.length && !lows.length;
 
   // Reihenfolge: Ort-Buttons, Suche, Kopf, Sicherungs-Hinweis, Kacheln, Warnungen, Kisten, Tags, Wetter, Widget.
   return `<nav class="netbar" aria-label="${t('places')}">${net}</nav>
@@ -226,10 +229,12 @@ export function renderHome() {
     <div id="home-dash" ${q ? 'hidden' : ''} style="--pc:${placeLook(p).color}">
       ${backupNotice()}
       <div class="stats">
-        <div class="stat"><b>${total}</b><span>${t('piecesTotal')}</span></div>
-        <button class="stat" type="button" data-act="home-stock" data-p="${pid}"><b>${here.length}</b><span>${t('articleKinds')}</span></button>
-        <button class="stat" type="button" data-act="home-stock" data-p="${pid}"><b>${groupsHere}</b><span>${t('groups')}</span></button>
-        <div class="stat ${lows.length ? 'bad' : ''}"><b>${lows.length}</b><span>${t('warnings')}</span></div>
+        <button class="stat" type="button" data-act="home-open" data-mode="open" data-p="${pid}"><b>${total}</b><span>${t('piecesTotal')}</span></button>
+        <button class="stat" type="button" data-act="home-open" data-mode="open" data-p="${pid}"><b>${here.length}</b><span>${t('articleKinds')}</span></button>
+        <button class="stat" type="button" data-act="home-open" data-mode="closed" data-p="${pid}"><b>${groupsHere}</b><span>${t('groups')}</span></button>
+        ${lows.length
+    ? `<button class="stat bad" type="button" data-act="home-open" data-mode="warn" data-p="${pid}"><b>${lows.length}</b><span>${t('warnings')}</span></button>`
+    : `<div class="stat"><b>0</b><span>${t('warnings')}</span></div>`}
       </div>
       <div class="quick">
         <button class="btn" type="button" data-act="qa-item" data-p="${pid}">${icon('plus')} ${t('itemNew')}</button>
@@ -239,9 +244,9 @@ export function renderHome() {
         <div class="list">${lows.map(({ item, entry }) => `<button class="row row--low" type="button" data-act="item-open" data-item="${item.id}">
           <span class="row-main"><b>${esc(store.nm(item))}</b><span class="muted">${store.minLabel(entry)}</span></span>
           <span class="row-qty low">${icon('alert', 16)}<b>${store.minCount(entry)}</b></span></button>`).join('')}</div>` : ''}
-      ${section(`${t('incoming')} → ${esc(p.name)}`, incoming)}
+      ${section(t('incoming'), incomingAll)}
       ${section(t('outgoing'), outgoing)}
-      ${section(t('seg.draft'), drafts)}
+      ${section(t('draftHeading'), drafts)}
       ${quiet ? `<div class="empty small">${arrow('big')}<p>${t('allQuiet')}</p></div>` : ''}
       ${tagOverview(pid, here)}
       ${weatherCard(pid)}
@@ -249,8 +254,25 @@ export function renderHome() {
     </div>`;
 }
 
-/** Kachel „Artikel“: direkt in die Bestandsliste des angezeigten Ortes. */
-actions['home-stock'] = (el) => { ui.place = el.dataset.p; ui.search = ''; location.hash = '#/stock'; };
+/**
+ * Kacheln der Startseite -> Bestandsliste des angezeigten Ortes:
+ * open = alle Gruppen aufgeklappt, closed = alle zugeklappt,
+ * warn = nur die Gruppen mit Mindestbestand-Warnung aufgeklappt, dorthin gescrollt und die Artikel kurz markiert.
+ */
+actions['home-open'] = (el) => {
+  const { p: pid, mode } = el.dataset;
+  const ids = store.groups().map((g) => g.id);
+  ui.place = pid; ui.search = ''; ui.focus = null;
+  if (mode === 'warn') {
+    const lows = store.lowStock(pid);
+    const open = new Set(lows.map(({ item }) => item.groupId));
+    ids.forEach((id) => { ui.collapsed[id] = !open.has(id); });
+    ui.focus = lows.map(({ item }) => item.id);
+  } else {
+    ids.forEach((id) => { ui.collapsed[id] = mode === 'closed'; });
+  }
+  location.hash = '#/stock';
+};
 
 /** Ort-Buttons: je nach Einstellung Dashboard dieses Ortes oder dessen Bestandsliste. */
 actions['home-place'] = (el) => {

@@ -17,9 +17,9 @@ export function routeHtml(tr, size = 'sm') {
 
 export function transportCard(tr) {
   const n = tr.lines.reduce((a, l) => a + l.qty, 0);
-  const date = tr.status === 'sent' ? t('since', { d: fmtDate(tr.sentAt) })
-    : tr.status === 'arrived' ? t('arrivedOn', { d: fmtDate(tr.arrivedAt) })
-    : tr.status === 'cancelled' ? t('cancelledOn', { d: fmtDate(tr.cancelledAt) }) : '';
+  const date = tr.status === 'sent' ? t('since', { d: fmtDate(tr.sentAt, true) })
+    : tr.status === 'arrived' ? t('arrivedInline', { d: fmtDate(tr.arrivedAt, true) })
+    : tr.status === 'cancelled' ? t('cancelledInline', { d: fmtDate(tr.cancelledAt, true) }) : '';
   const groups = new Set(tr.lines.map((l) => store.item(l.itemId)?.groupId).filter(Boolean)).size;
   const info = [groups === 1 ? t('nGroup1') : t('nGroups', { n: groups }), t('nArticlesTotal', { n }), date].filter(Boolean).join(' · ');
   return `<button class="tcard tcard--${tr.status}" type="button" data-act="tr-open" data-id="${tr.id}">

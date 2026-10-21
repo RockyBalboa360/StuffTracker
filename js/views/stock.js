@@ -17,6 +17,9 @@ const ACCENT_FAMILIES = [
   [PALETTE.blue], [PALETTE.grey], [PALETTE.orange], [PALETTE.red], [PALETTE.yellow],
 ];
 export function groupAccent() {
+  // Manuelle Wahl in Mehr -> Gruppenfarbe hat Vorrang vor der automatischen Auswahl.
+  const manual = store.settings().groupColor;
+  if (manual && manual !== 'auto') return manual;
   const used = new Set(store.places().map((p) => placeLook(p).color.toLowerCase()));
   const free = ACCENT_FAMILIES.find((fam) => !fam.some((c) => used.has(c.toLowerCase())));
   return (free || ACCENT_FAMILIES[0])[0];
@@ -140,6 +143,15 @@ export function renderStock() {
     </div>
     <div id="stock-list" class="list">${listHtml()}</div>
     <button class="fab" type="button" data-act="item-new" aria-label="${t('itemNew')}">${icon('plus', 28)}</button>`;
+}
+
+/** Nach dem Zeichnen: von der Startseite angesprungene Warn-Artikel markieren und ins Bild scrollen. */
+export function afterStock() {
+  const ids = ui.focus; ui.focus = null;
+  if (!ids?.length) return;
+  const rows = ids.map((id) => document.querySelector(`#stock-list [data-item="${id}"]`)).filter(Boolean);
+  rows.forEach((r) => r.classList.add('flash'));
+  rows[0]?.scrollIntoView({ block: 'center' });
 }
 
 /** Teil-Aktualisierung, damit das Suchfeld den Fokus behält. */
