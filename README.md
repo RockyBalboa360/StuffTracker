@@ -10,7 +10,7 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
   Lange drücken ändert Zeichen, Farbe und Form.
 - **Artikel in Gruppen** (zwei Ebenen), Foto als kleines Vorschaubild (Kamera oder Galerie).
 - **Tags** als Etiketten zum Antippen. Ein Tag zählt **Stückzahlen**: Langarmshirt in „Wohnung“, Bestand 4, davon
-  3 sauber und 1 schmutzig – der Artikel steht nur einmal in der Liste. Höchstens 4 verschiedene Tags je Artikel und Ort.
+  3 sauber und 1 schmutzig – der Artikel steht nur einmal in der Liste. Höchstens 6 verschiedene Tags je Artikel und Ort.
   Standard: sauber (glänzend), schmutzig (ockerfarbenes Pflegeetikett), verloren (indigo), beschädigt (grau). Weitere Tags über „+“.
   In der Bestandsliste zeigen kleine Kreise je Ort nur die dort aktiven Tags mit ihrer Stückzahl (der Kreis wächst mit der
   Stellenzahl); Stücke ohne Tag zeigt ein transparenter Kreis mit dünnem Rand.
@@ -19,10 +19,12 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
   um 1 und umgekehrt. Andere Tags nehmen zuerst Stücke ohne Tag, dann vom größten anderen Tag.
   Die Reihenfolge der Verknüpfungen ist die Priorität (mit Pfeilen änderbar): Kommt ein Tag in mehreren Verknüpfungen vor,
   wirken die späteren überwiegend nur in eine Richtung.
-- **Startseite:** Ort-Buttons oben (Dashboard des Ortes), darunter Datum und Datum der letzten Änderung, Suche über alle Daten
-  (Artikel, Gruppen, Tags, Orte, Kisten), Kennzahlen (die Kachel „Artikel“ springt in die Bestandsliste), Schnellaktionen
-  (neuer Artikel, neue Kiste), **Wetter** (aktuell, nächste 3 Stunden, morgen, Sonnenauf-/untergang, Zeitpunkt der Abfrage),
-  Warnungen, Tag-Übersicht des Ortes, Kisten unterwegs und ein Hinweis zur Datensicherung (nach mehr als 9 Tagen).
+- **Startseite** (von oben): Ort-Buttons, Suche über alle Daten (Artikel, Gruppen, Tags, Orte, Kisten), Kopf mit Datum, Datum der
+  letzten Änderung und Ortsname, Hinweis zur Datensicherung (nach mehr als 9 Tagen), Kacheln *Stück gesamt · Artikelarten · Gruppen ·
+  Warnungen* (Linie in der Ortsfarbe; Artikelarten und Gruppen springen in die Bestandsliste) mit Schnellaktionen (neuer Artikel,
+  neue Kiste), Warnungen, Kisten unterwegs/in Vorbereitung, Tag-Übersicht des Ortes, danach das **Wetter** (aktuell, nächste
+  3 Stunden, morgen, Sonnenauf-/untergang, Zeitpunkt der Abfrage) und die Widget-Karte.
+- **Update-Meldungen:** „Neue Version verfügbar“ und nach der Installation „Update abgeschlossen. Sie arbeiten jetzt in Version x.“
 - **Wetter:** DWD über [Bright Sky](https://brightsky.dev); außerhalb Deutschlands automatisch MET Norway (api.met.no).
   Der Standort eines Ortes wird unter *Mehr → Orte → Ort bearbeiten → Standort & Wetter einstellen* per Adresse, Ort,
   Koordinaten oder GPS festgelegt; dort wählt man auch eine Wetterstation (Auswahlliste). Abschalten: *Mehr → Wetter*.
@@ -88,7 +90,7 @@ sw.js, manifest.webmanifest, icons/
 
 - Tags gehören zum **Artikel am Ort** und tragen eine Stückzahl (höchstens der Bestand). Stücke ohne Tag sind erlaubt.
 - Beim Einlegen in eine Kiste legt man fest, wie viele der Stücke welches Tag tragen (Vorgabe: der Reihe nach auffüllen).
-  Am Ziel werden die Anzahlen zu den vorhandenen addiert (maximal 4 verschiedene Tags, darüber hinaus gehen Stücke ohne Tag ein).
+  Am Ziel werden die Anzahlen zu den vorhandenen addiert (maximal 6 verschiedene Tags, darüber hinaus gehen Stücke ohne Tag ein).
 - Eine Kiste in Vorbereitung **reserviert** Stück und Tag-Anzahlen (der Bestand sinkt erst beim Abschicken).
 - Orte lassen sich nur löschen, wenn sie keinen Bestand und keine offenen Transporte haben.
 

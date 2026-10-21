@@ -1,7 +1,7 @@
 // Startseite: Dashboard für den angezeigten Ort, Suche über alle Daten, Wetter, Tag-Übersicht, Schnellaktionen.
 import { t, getLang } from '../i18n.js';
 import * as store from '../store.js';
-import { esc, icon, badge, tagChip, actions, openSheet, closeSheet, ui, arrow } from '../ui.js';
+import { esc, icon, badge, tagChip, actions, openSheet, closeSheet, ui, arrow, placeLook } from '../ui.js';
 import { transportCard, openTransportForm } from './transport.js';
 import { rowAll, haystack } from './stock.js';
 import { openItemForm } from './item.js';
@@ -49,8 +49,8 @@ const hhmm = (ms) => new Date(ms).toLocaleTimeString(loc(), { hour: '2-digit', m
 
 function sunLine(p) {
   const s = sunTimes(new Date(), Number(p.lat), Number(p.lon));
-  if (s.polar) return `<div class="wx-sun">${icon(s.polar === 'day' ? 'sunrise' : 'sunset', 18)} ${t(s.polar === 'day' ? 'polarDay' : 'polarNight')}</div>`;
-  return `<div class="wx-sun"><span>${icon('sunrise', 18)} ${t('sunrise')} <b>${hhmm(s.rise)}</b></span><span>${icon('sunset', 18)} ${t('sunset')} <b>${hhmm(s.set)}</b></span></div>`;
+  if (s.polar) return `<div class="wx-sun">${icon(s.polar === 'day' ? 'sunrise' : 'sunset', 30)} <i>${t(s.polar === 'day' ? 'polarDay' : 'polarNight')}</i></div>`;
+  return `<div class="wx-sun"><span>${icon('sunrise', 32)}<span class="sx"><i>${t('sunrise')}</i><b>${hhmm(s.rise)}</b></span></span><span>${icon('sunset', 32)}<span class="sx"><i>${t('sunset')}</i><b>${hhmm(s.set)}</b></span></span></div>`;
 }
 
 function weatherCard(pid) {
@@ -76,7 +76,7 @@ function weatherCard(pid) {
   const h3 = (w.next3 || []).map((h) => `<div class="wx-h"><small>${new Date(h.t).toLocaleTimeString(loc(), { hour: '2-digit' })}</small>${wx.weatherIcon(h.icon, 30)}<b>${fmtT(h.temp)}</b><em>${fmtMm(h.precip || 0)}</em></div>`).join('');
   const station = w.station ? ` · ${esc(w.station.name)}${w.station.km != null ? `, ${w.station.km} km` : ''}` : '';
   return `<section class="wx ${old ? 'wx--old' : ''}" id="weather-card">
-    <div class="wx-top"><span class="wx-place">${esc(p.name)}</span>
+    <div class="wx-top"><span class="wx-asked">${old ? t('wxOld', { time: hhmm(w.fetchedAt) }) : t('wxAsked', { time: hhmm(w.fetchedAt) })}</span>
       <button class="wx-refresh" type="button" data-act="wx-refresh" data-id="${pid}" aria-label="${t('wxRefresh')}">${icon('refresh', 18)}</button></div>
     <div class="wx-now">${wx.weatherIcon(n.icon, 88)}
       <div class="wx-temp">${fmtT(n.temp)}<small>C</small></div>
@@ -88,7 +88,7 @@ function weatherCard(pid) {
         <em>${fmtMm(tom.precip)}${tom.prob != null ? ` · ${Math.round(tom.prob)} %` : ''}</em></div></div>` : '–'}</div>
     </div>
     ${sunLine(p)}
-    <div class="wx-meta">${old ? t('wxOld', { time: hhmm(w.fetchedAt) }) : t('wxAsked', { time: hhmm(w.fetchedAt) })} · ${t(w.source === 'met' ? 'wxModel' : 'wxMeasured', { time: hhmm(n.time) })} · ${esc(w.sourceName)}${station}</div>
+    <div class="wx-meta">${t(w.source === 'met' ? 'wxModel' : 'wxMeasured', { time: hhmm(n.time) })} · ${esc(w.sourceName)}${station}</div>
   </section>`;
 }
 
@@ -211,36 +211,41 @@ export function renderHome() {
 
   const section = (title, list) => (list.length ? `<h2 class="h2">${title}</h2><div class="list">${list.map(transportCard).join('')}</div>` : '');
 
+  const groupsHere = new Set(here.map((it) => it.groupId)).size;
+  const quiet = !incoming.length && !outgoing.length && !drafts.length && !lows.length;
+
+  // Reihenfolge: Ort-Buttons, Suche, Kopf, Sicherungs-Hinweis, Kacheln, Warnungen, Kisten, Tags, Wetter, Widget.
   return `<nav class="netbar" aria-label="${t('places')}">${net}</nav>
+    <label class="search search--page">${icon('search', 20)}<input id="hq" type="search" placeholder="${t('homeSearchPh')}" value="${esc(ui.homeSearch || '')}" autocomplete="off" enterkeyhint="search"></label>
     <header class="sign sign--hero">
-      <div class="sign-kicker"><span>${esc(date)}</span><span class="lastchg">${t('lastChange')}: <b>${lcText}</b></span></div>
+      <div class="sign-kicker"><span>${esc(date)}</span><span class="lastchg">${t('lastChange')}: ${lcText}</span></div>
       ${toStock ? `<div class="chg-row"><button class="chg" type="button" data-act="place-switch">${isDefault && auto ? icon('gps', 16) : icon('pin', 16)} ${t('change')}</button></div>` : ''}
       <div class="hero-row"><h1 class="${p.name.length > 11 ? 'h1-long' : ''}">${esc(p.name)}</h1>${badge(p, 'xl')}</div>
-      <label class="search">${icon('search', 20)}<input id="hq" type="search" placeholder="${t('homeSearchPh')}" value="${esc(ui.homeSearch || '')}" autocomplete="off" enterkeyhint="search"></label>
     </header>
     <div id="home-results" ${q ? '' : 'hidden'}>${q ? homeResults(q) : ''}</div>
-    <div id="home-dash" ${q ? 'hidden' : ''}>
+    <div id="home-dash" ${q ? 'hidden' : ''} style="--pc:${placeLook(p).color}">
       ${backupNotice()}
       <div class="stats">
-        <div class="stat"><b>${total}</b><span>${t('pieces')}</span></div>
-        <button class="stat" type="button" data-act="home-stock" data-p="${pid}"><b>${here.length}</b><span>${t('articles')}</span></button>
+        <div class="stat"><b>${total}</b><span>${t('piecesTotal')}</span></div>
+        <button class="stat" type="button" data-act="home-stock" data-p="${pid}"><b>${here.length}</b><span>${t('articleKinds')}</span></button>
+        <button class="stat" type="button" data-act="home-stock" data-p="${pid}"><b>${groupsHere}</b><span>${t('groups')}</span></button>
         <div class="stat ${lows.length ? 'bad' : ''}"><b>${lows.length}</b><span>${t('warnings')}</span></div>
       </div>
       <div class="quick">
         <button class="btn" type="button" data-act="qa-item" data-p="${pid}">${icon('plus')} ${t('itemNew')}</button>
         <button class="btn" type="button" data-act="qa-box" data-p="${pid}">${icon('box')} ${t('boxNewShort')}</button>
       </div>
-      ${weatherCard(pid)}
       ${lows.length ? `<h2 class="h2 h2--warn">${icon('alert', 18)} ${t('lowStock')}</h2>
         <div class="list">${lows.map(({ item, entry }) => `<button class="row row--low" type="button" data-act="item-open" data-item="${item.id}">
           <span class="row-main"><b>${esc(store.nm(item))}</b><span class="muted">${store.minLabel(entry)}</span></span>
           <span class="row-qty low">${icon('alert', 16)}<b>${store.minCount(entry)}</b></span></button>`).join('')}</div>` : ''}
-      ${tagOverview(pid, here)}
       ${section(`${t('incoming')} → ${esc(p.name)}`, incoming)}
       ${section(t('outgoing'), outgoing)}
       ${section(t('seg.draft'), drafts)}
+      ${quiet ? `<div class="empty small">${arrow('big')}<p>${t('allQuiet')}</p></div>` : ''}
+      ${tagOverview(pid, here)}
+      ${weatherCard(pid)}
       ${widgetHtml(pid)}
-      ${!incoming.length && !outgoing.length && !drafts.length && !lows.length ? `<div class="empty small">${arrow('big')}<p>${t('allQuiet')}</p></div>` : ''}
     </div>`;
 }
 

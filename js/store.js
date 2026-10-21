@@ -1,10 +1,13 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.6.0';
-export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 4, tagsTotal: 16 };
+export const VERSION = '0.7.0';
+export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 16 };
 
 let data = null;
+let migratedFrom = null;
+/** true, wenn beim Start gespeicherte Daten auf ein neueres Modell gehoben wurden (also nach einem App-Update). */
+export const wasMigrated = () => migratedFrom != null;
 let photos = new Map();
 const subs = new Set();
 let saveTimer = null;
@@ -84,6 +87,10 @@ function migrate(d) {
     d.settings.lastBackup ??= null;
     d.v = 5;
   }
+  if (d.v < 6) {
+    // v6: nur eine Versionsmarke – löst die Meldung „Update abgeschlossen“ beim Wechsel von 0.6.x aus
+    d.v = 6;
+  }
   d.settings.homeButtons ||= 'dashboard';
   return d;
 }
@@ -92,7 +99,7 @@ export async function load() {
   try {
     db = await openDb();
     data = await wrap(tx('kv').get('data'));
-    if (data) { const before = data.v; migrate(data); if (before !== data.v) scheduleSave(); }
+    if (data) { const before = data.v; migrate(data); if (before !== data.v) { migratedFrom = before; scheduleSave(); } }
     const store = tx('photos');
     const keys = await wrap(store.getAllKeys());
     const vals = await wrap(tx('photos').getAll());
@@ -635,7 +642,7 @@ function seed(lang, empty = false) {
     { id: 'tg_damaged', key: 'tag.damaged', style: 'damaged' },
   ];
   const d = {
-    v: 5,
+    v: 6,
     tagLinks: [['tg_clean', 'tg_dirty']],
     settings: {
       lang: 'auto', theme: 'auto', placeMode: 'auto', manualPlace: null, lastPlace: null, lastGeo: null,

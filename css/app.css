@@ -166,13 +166,13 @@ h2.h2 { font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spa
 h2.h2--warn { color: var(--warn); }
 
 /* ---------- Start ---------- */
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px; }
-.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; text-align: left; color: var(--text); }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px; }
+.stat { background: var(--surface); border: 1.5px solid color-mix(in srgb, var(--pc, var(--border)) 55%, transparent); border-radius: 14px; padding: 10px 10px 9px; display: flex; flex-direction: column; gap: 2px; text-align: left; color: var(--text); min-width: 0; }
 button.stat { font: inherit; cursor: pointer; }
 button.stat:active { background: var(--surface2); }
 .stat span .ic { width: 14px; height: 14px; }
-.stat b { font-size: 34px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
-.stat span { font-size: 13px; color: var(--muted); font-weight: 600; }
+.stat b { font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.stat span { font-size: 12px; line-height: 1.15; color: var(--muted); font-weight: 600; }
 .stat.bad { border-color: var(--warn); } .stat.bad b { color: var(--warn); }
 .widget { margin: 18px 14px 0; background: var(--sign); color: var(--sign-fg); border-radius: 16px; padding: 16px 16px 14px; position: relative; }
 .widget::before { content: ""; position: absolute; left: 12px; right: 12px; top: 5px; height: 1px; background: #cfcfcd; }
@@ -341,7 +341,7 @@ body.has-sheet .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 .lastchg { color: #b9b9bd; font-weight: 600; text-align: right; }
-.lastchg b { color: #fff; font-weight: 700; }
+.lastchg b { font-weight: 600; }
 .chg-row { display: flex; margin: -2px 0 10px; }
 .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 14px; }
 .notice { display: flex; align-items: center; gap: 12px; margin: 14px 14px 0; padding: 12px 14px; border: 2px solid var(--warn); border-radius: 16px; background: var(--surface); color: var(--warn); }
@@ -392,3 +392,20 @@ body.has-sheet .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 select.field { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%; background-size: 6px 6px; background-repeat: no-repeat; padding-right: 36px; }
 .loc-name { flex: 1; text-align: left; font-weight: 600; font-size: 14px; line-height: 1.3; }
 .quick .btn { padding: 0 10px; gap: 6px; font-size: 15px; white-space: nowrap; }
+.quick .btn { border-color: color-mix(in srgb, var(--pc, var(--border)) 55%, transparent); }
+.search--page { background: var(--surface); border: 1px solid var(--border); color: var(--muted); margin: 0 14px 12px; }
+.search--page input { color: var(--text); }
+.search--page input::placeholder { color: var(--muted); }
+.wx-asked { text-transform: none; letter-spacing: 0; font-weight: 700; font-size: 13px; }
+.wx--old .wx-asked { color: #e0a458; }
+.wx-sun { background: #17181b; border-radius: 14px; padding: 10px 14px; font-size: 15px; align-items: center; }
+.wx-sun span { gap: 8px; }
+.wx-sun i { font-style: normal; color: #b9b9bd; font-size: 13px; }
+.wx-sun b { font-size: 21px; font-weight: 800; letter-spacing: -.01em; }
+.wx-sun .ic { color: #FCCC0A; }
+#update-done { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 10px); z-index: 120; background: #0b0b0c; color: #fff; border: 2px solid var(--ok); border-radius: 14px; padding: 10px 12px 10px 16px; display: flex; align-items: center; gap: 12px; font-weight: 700; }
+#update-done span { flex: 1; display: flex; align-items: center; gap: 8px; }
+#update-done .ic { color: #3ddc84; }
+#update-done button { background: var(--ok); color: #fff; border: 0; border-radius: 10px; font-weight: 800; padding: 10px 14px; }
+.wx-sun .sx { display: flex; flex-direction: column; gap: 1px; line-height: 1.1; }
+.wx-sun { justify-content: space-around; }

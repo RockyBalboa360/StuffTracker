@@ -111,6 +111,28 @@ function showUpdateBanner(worker) {
   bar.querySelector('button').onclick = () => worker.postMessage('SKIP_WAITING');
   document.body.appendChild(bar);
 }
+/** Bestätigung nach einem Update: gleiche Leiste wie „Update verfügbar“, mit Haken. */
+function showUpdateDone() {
+  if (document.getElementById('update-done')) return;
+  const bar = document.createElement('div');
+  bar.id = 'update-done';
+  bar.setAttribute('role', 'status');
+  bar.innerHTML = `<span>${icon('check', 20)} ${t('updateDone', { v: store.VERSION })}</span><button type="button">${t('ok')}</button>`;
+  const close = () => bar.remove();
+  bar.querySelector('button').onclick = close;
+  document.body.appendChild(bar);
+  setTimeout(close, 12000);
+}
+/** Merkt sich die zuletzt genutzte Version; ein Wechsel (oder eine Datenmigration) heißt: Update ist durch. */
+function announceUpdate() {
+  let changed = store.wasMigrated();
+  try {
+    const last = localStorage.getItem('st_lastver');
+    if (last && last !== store.VERSION) changed = true;
+    localStorage.setItem('st_lastver', store.VERSION);
+  } catch { /* Speicher gesperrt */ }
+  if (changed) showUpdateDone();
+}
 let swReg = null;
 function setupSW() {
   if (!('serviceWorker' in navigator)) return;
@@ -152,6 +174,7 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); defe
   render(false);
   store.subscribe(schedule);
   setupSW();
+  announceUpdate();
   setTimeout(detect, 1500);
   document.getElementById('splash')?.remove();
   window.__st = { store, ui };
