@@ -30,6 +30,9 @@ const P = {
   down: '<path d="M6 9l6 6 6-6"/>',
   gps: '<circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v4.5h-4.5"/>',
+  rotl: '<path d="M4 4v6h6M4.6 10A8 8 0 1 1 6 17.3"/>',
+  rotr: '<path d="M20 4v6h-6M19.4 10A8 8 0 1 0 18 17.3"/>',
+  crop: '<path d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14"/>',
   sunrise: '<path d="M4 19h16M7.5 19a4.5 4.5 0 019 0M12 11V5M9 8l3-3 3 3"/>',
   sunset: '<path d="M4 19h16M7.5 19a4.5 4.5 0 019 0M12 5v6M9 8l3 3 3-3"/>',
   collapse: '<path d="M7 4l5 5 5-5M7 20l5-5 5 5"/>',
@@ -241,6 +244,7 @@ export function openSheet(opts) {
 function removeTop() {
   const h = stack.pop();
   if (!h) return;
+  h.opts.onClose?.(h);
   h.el.classList.remove('in');
   setTimeout(() => h.el.remove(), 220);
   if (!stack.length) document.body.classList.remove('has-sheet');

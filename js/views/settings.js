@@ -12,6 +12,22 @@ import { groupAccent } from './stock.js';
 const seg = (act, cur, opts) => `<div class="segmented">${opts.map(([v, label]) =>
   `<button type="button" class="${cur === v ? 'on' : ''}" data-act="${act}" data-v="${v}">${label}</button>`).join('')}</div>`;
 
+/* ---------- Aufklapp-Menüs (Orte, Gruppen, Tag-Verknüpfungen, Gruppenfarbe) ---------- */
+const ACC_KEY = 'st_acc';
+const openSet = (() => { try { return new Set(JSON.parse(localStorage.getItem(ACC_KEY) || '[]')); } catch { return new Set(); } })();
+const saveAcc = () => { try { localStorage.setItem(ACC_KEY, JSON.stringify([...openSet])); } catch { /* Speicher gesperrt */ } };
+const accStart = (key, title, summary) => `<section class="card acc ${openSet.has(key) ? 'open' : ''}" data-acc="${key}">
+  <button type="button" class="acc-h" data-act="acc" data-k="${key}" aria-expanded="${openSet.has(key)}"><h3>${title}</h3><span class="acc-sum">${summary}</span>${icon('chevron', 22)}</button>
+  <div class="acc-b">`;
+const accEnd = '</div></section>';
+actions['acc'] = (el) => {
+  const k = el.dataset.k; const open = !openSet.has(k);
+  if (open) openSet.add(k); else openSet.delete(k);
+  el.closest('.acc').classList.toggle('open', open);
+  el.setAttribute('aria-expanded', String(open));
+  saveAcc();
+};
+
 export function renderSettings() {
   const s = store.settings();
   const w = s.widget;
@@ -35,7 +51,7 @@ export function renderSettings() {
       <button type="button" class="switch ${s.weatherOn ? 'on' : ''}" data-act="wx-toggle" role="switch" aria-checked="${s.weatherOn}"><i></i><span>${t('wxShow')}</span></button>
       <p class="hint">${t('wxSettingsHint')}</p></section>
 
-    <section class="card"><h3>${t('places')} <small>${ps.length}/${store.LIMITS.places}</small></h3>
+    ${accStart('places', t('places'), ps.map((p) => badge(p, 'xs')).join('') + `<small>${ps.length}/${store.LIMITS.places}</small>`)}
       <p class="hint">${t('badgeHint')}</p>
       ${ps.map((p) => `<div class="srow"><span class="srow-badge">${badge(p, 'md')}</span>
         <button type="button" class="srow-main" data-act="place-edit" data-id="${p.id}"><b>${esc(p.name)}</b>
@@ -49,22 +65,22 @@ export function renderSettings() {
       <p class="hint">${t(s.placeMode === 'manual' ? 'detectHintFixed' : 'detectHint')}</p>
       <div class="lbl">${t('homeButtons')}</div>
       ${seg('set-hb', s.homeButtons, [['dashboard', t('homeButtons.dashboard')], ['stock', t('homeButtons.stock')]])}
-      <p class="hint">${t(s.homeButtons === 'stock' ? 'homeButtonsHintStock' : 'homeButtonsHintDash')}</p></section>
+      <p class="hint">${t(s.homeButtons === 'stock' ? 'homeButtonsHintStock' : 'homeButtonsHintDash')}</p>${accEnd}
 
-    <section class="card"><h3>${t('groups')}</h3>
+    ${accStart('groups', t('groups'), `<small>${store.groups().length}</small>`)}
       ${store.groups().map((g, i, a) => `<div class="srow">
         <button type="button" class="srow-main" data-act="grp-rename" data-id="${g.id}"><b>${esc(store.nm(g))}</b><span class="muted">${t('nArticles', { n: store.groupCount(g.id) })}</span></button>
         <button type="button" class="icon-btn" data-act="grp-up" data-id="${g.id}" ${i === 0 ? 'disabled' : ''} aria-label="up">${icon('up', 20)}</button>
         <button type="button" class="icon-btn" data-act="grp-down" data-id="${g.id}" ${i === a.length - 1 ? 'disabled' : ''} aria-label="down">${icon('down', 20)}</button>
         <button type="button" class="icon-btn icon-btn--danger" data-act="grp-del" data-id="${g.id}" aria-label="${t('delete')}">${icon('trash', 20)}</button></div>`).join('')}
-      <button type="button" class="btn btn--block" data-act="grp-add">${icon('plus')} ${t('groupAdd')}</button></section>
+      <button type="button" class="btn btn--block" data-act="grp-add">${icon('plus')} ${t('groupAdd')}</button>${accEnd}
 
     <section class="card"><h3>${t('tags')} <small>${store.tags().length}/${store.LIMITS.tagsTotal}</small></h3>
       <p class="hint">${t('tagsHint', { n: store.LIMITS.tagsPerEntry })}</p>
       <div class="tagrow">${store.tags().map((g) => `<span class="tagwrap">${tagChip(g, { act: 'tag-edit', attrs: `data-id="${g.id}"` })}</span>`).join('')}
       <button class="tag tag--add" type="button" data-act="tag-add" aria-label="${t('tagNew')}">${icon('plus', 16)}</button></div></section>
 
-    <section class="card"><h3>${t('tagLinks')}</h3>
+    ${accStart('links', t('tagLinks'), `<small>${store.tagLinks().length}</small>`)}
       <ol class="rules">
         <li>${t('tagLinksRule1')}</li>
         <li>${t('tagLinksRule2')}</li>
@@ -77,13 +93,13 @@ export function renderSettings() {
         <button type="button" class="icon-btn" data-act="link-up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="up">${icon('up', 20)}</button>
         <button type="button" class="icon-btn" data-act="link-down" data-i="${i}" ${i === all.length - 1 ? 'disabled' : ''} aria-label="down">${icon('down', 20)}</button>
         <button type="button" class="icon-btn icon-btn--danger" data-act="link-del" data-i="${i}" aria-label="${t('delete')}">${icon('trash', 20)}</button></div>`).join('') || `<p class="hint">${t('tagLinksNone')}</p>`}
-      <button type="button" class="btn btn--block" data-act="link-add">${icon('plus')} ${t('linkAdd')}</button></section>
+      <button type="button" class="btn btn--block" data-act="link-add">${icon('plus')} ${t('linkAdd')}</button>${accEnd}
 
-    <section class="card"><h3>${t('groupColor')}</h3>
+    ${accStart('gcolor', t('groupColor'), `<span class="sumdot" style="--sw:${groupAccent()}"></span>`)}
       <p class="hint">${t('groupColorHint')}</p>
       <div class="gpreview" style="--ga:${groupAccent()}"><span>${esc(t('group.base'))}</span></div>
       <div class="chips pad"><button type="button" class="chip ${autoColor ? 'on' : ''}" data-act="gc-auto">${icon('refresh', 16)} ${t('groupColorAuto')}</button></div>
-      <div class="swatches">${Object.values(PALETTE).map((c) => `<button type="button" class="swatch ${!autoColor && c.toLowerCase() === groupAccent().toLowerCase() ? 'on' : ''}" style="--sw:${c}" data-act="gc-set" data-c="${c}" aria-label="${c}"></button>`).join('')}</div></section>
+      <div class="swatches">${Object.values(PALETTE).map((c) => `<button type="button" class="swatch ${!autoColor && c.toLowerCase() === groupAccent().toLowerCase() ? 'on' : ''}" style="--sw:${c}" data-act="gc-set" data-c="${c}" aria-label="${c}"></button>`).join('')}</div>${accEnd}
 
     <section class="card"><h3>${t('widget')}</h3>
       <p class="hint">${t('widgetHint')}</p>

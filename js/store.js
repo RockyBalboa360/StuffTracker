@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.9.0';
+export const VERSION = '0.10.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 16 };
 
 let data = null;
@@ -276,10 +276,16 @@ export function defaultAlloc(it, pid, qty) {
 }
 
 /* ---------- Artikel ---------- */
-export function addItem({ name, groupId, placeId, qty, photoData }) {
+export function addItem({ name, groupId, placeId, qty, photoData, tags }) {
   return mutate(() => {
     const it = { id: uid(), name, groupId, stock: {}, createdAt: Date.now() };
-    if (placeId && qty > 0) { const e = ensureEntry(it, placeId); e.qty = qty; }
+    if (placeId && qty > 0) {
+      const e = ensureEntry(it, placeId);
+      e.qty = qty;
+      // Tags mit Stückzahl gleich beim Anlegen (Summe <= Menge, höchstens tagsPerEntry verschiedene)
+      for (const [k, n] of Object.entries(tags || {}).slice(0, LIMITS.tagsPerEntry)) if (n > 0 && tag(k)) e.tags[k] = n;
+      normalize(e);
+    }
     data.items.push(it);
     if (photoData) { photos.set(it.id, photoData); savePhoto(it.id, photoData); }
     addLog('itemNew', { item: name, place: place(placeId)?.name, qty });

@@ -1,10 +1,10 @@
 // Service Worker: Offline-Betrieb + kontrolliertes Update.
 // Bei jeder Änderung an App-Dateien VERSION erhöhen (siehe tools/bump.mjs), sonst bleibt der alte Cache aktiv.
-const VERSION = '0.9.0';
+const VERSION = '0.10.0';
 const CACHE = `stufftracker-${VERSION}`;
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/app.js', 'js/store.js', 'js/ui.js', 'js/i18n.js', 'js/sun.js', 'js/photo.js', 'js/weather.js', 'js/suggest.js',
+  'js/app.js', 'js/store.js', 'js/ui.js', 'js/i18n.js', 'js/sun.js', 'js/photo.js', 'js/photoedit.js', 'js/weather.js', 'js/suggest.js',
   'js/views/home.js', 'js/views/stock.js', 'js/views/item.js', 'js/views/transport.js', 'js/views/settings.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
 ];

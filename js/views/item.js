@@ -5,10 +5,13 @@ import {
   esc, icon, badge, tagChip, thumb, stepper, stepHandlers, actions, openSheet, closeSheet, topSheet,
   toast, confirmDialog, PALETTE, arrow,
 } from '../ui.js';
-import { pickPhoto } from '../photo.js';
+import { pickPhotoFile } from '../photo.js';
+import { openPhotoEditor } from '../photoedit.js';
 import { boxNameHtml, boxNameValue, bindBoxName } from './transport.js';
 
 stepHandlers['local-qty'] = (_a, v) => { const s = topSheet(); if (s) s.qty = v; };
+stepHandlers['nf-qty'] = (_a, v) => topSheet()?.onQty?.(v);
+stepHandlers['nf-tag'] = (a, v) => topSheet()?.onTag?.(a.tag, v);
 stepHandlers['item-qty'] = (a, v) => store.setQty(a.item, a.place, v);
 stepHandlers['tag-count'] = (a, v) => {
   if (!store.setTagCount(a.item, a.place, a.tag, v)) toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn');
@@ -110,11 +113,15 @@ actions['item-delete'] = async (el) => {
 
 /* ================= Foto ================= */
 export function openPhotoSheet(itemId, onPick) {
+  // Foto wählen -> Dialog schließen -> Foto-Editor (drehen, zuschneiden) -> Ergebnis übernehmen
   const apply = async (camera) => {
-    const data = await pickPhoto(camera);
+    const file = await pickPhotoFile(camera);
+    if (!file) return;
+    closeSheet();
+    await new Promise((r) => setTimeout(r, 320));
+    const data = await openPhotoEditor(file);
     if (!data) return;
     if (onPick) onPick(data); else store.setPhoto(itemId, data);
-    closeSheet();
   };
   const h = openSheet({
     title: t('photo'),
@@ -137,7 +144,23 @@ export function openPhotoSheet(itemId, onPick) {
 export function openItemForm(itemId, presetPlace) {
   const it = itemId ? store.item(itemId) : null;
   const cur = store.place(presetPlace) ? presetPlace : store.currentPlaceId();
-  const st = { name: it ? store.nm(it) : '', groupId: it?.groupId || store.groups()[0]?.id, placeId: cur, qty: 1, photo: null, photoSet: false };
+  const st = { name: it ? store.nm(it) : '', groupId: it?.groupId || store.groups()[0]?.id, placeId: cur, qty: 1, photo: null, photoSet: false, tags: {} };
+  const sumTags = () => Object.values(st.tags).reduce((a, b) => a + b, 0);
+  /** Tags und Anzahl je Tag direkt beim Anlegen: die Summe bleibt höchstens so groß wie die Gesamtmenge. */
+  const tagSection = (q) => {
+    if (q <= 0) return '';
+    const active = store.tagCounts(st.tags);
+    const rest = q - sumTags();
+    return `<div class="lbl">${t('tagsAndCount')}</div>
+      <div class="tagbox">
+        ${active.map(([g, n]) => `<div class="tagline">${tagChip(g)}${stepper({ value: n, min: 0, max: n + rest, on: 'nf-tag', args: { tag: g.id } })}</div>`).join('')}
+        ${active.length ? `<div class="tagline tagline--none"><span class="tag-ph">${t('noTag')}</span><span class="countbox">${rest}</span></div>` : ''}
+        <div class="tagrow">
+          ${store.tags().filter((g) => !(st.tags[g.id] > 0)).map((g) => tagChip(g, { on: false, act: 'nf-tag-add', attrs: `data-tag="${g.id}"` })).join('')}
+          <button class="tag tag--add" type="button" data-act="nf-tag-new" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
+        </div>
+      </div>`;
+  };
   const h = openSheet({
     title: it ? t('edit') : t('itemNew'),
     render: (hh) => `
@@ -150,7 +173,8 @@ export function openItemForm(itemId, presetPlace) {
         <button type="button" class="photo-btn" data-act="f-photo">${st.photo ? `<span class="thumb sz-xl"><img src="${st.photo}" alt=""></span>` : `<span class="thumb thumb--empty sz-xl">${icon('camera', 28)}</span>`}</button>
         <div class="lbl">${t('startStock')}</div>
         <div class="chips">${store.places().map((p) => `<button type="button" class="chip chip--badge ${p.id === st.placeId ? 'on' : ''}" data-act="f-place" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
-        <div class="pad">${stepper({ value: hh.qty ?? 1, on: 'local-qty' })}</div>`}`,
+        <div class="pad">${stepper({ value: hh.qty ?? 1, on: 'nf-qty' })}</div>
+        ${tagSection(hh.qty ?? 1)}`}`,
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="f-save">${icon('check')} ${t('save')}</button>`,
     actions: {
       'f-group': (el) => {
@@ -162,6 +186,8 @@ export function openItemForm(itemId, presetPlace) {
         h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el));
       },
       'f-photo': () => openPhotoSheet(null, (data) => { st.photo = data; st.photoSet = true; h.redraw(); }),
+      'nf-tag-add': (el) => addLocalTag(el.dataset.tag),
+      'nf-tag-new': () => openTagForm(null, (g) => { if (g) addLocalTag(g.id); }),
       'f-save': () => {
         const name = h.el.querySelector('#f-name').value.trim();
         if (!name) { toast(t('nameReq'), 'warn'); h.el.querySelector('#f-name').focus(); return; }
@@ -169,7 +195,7 @@ export function openItemForm(itemId, presetPlace) {
           store.updateItem(it.id, { name, groupId: st.groupId });
         } else {
           const q = h.qty ?? 1;
-          store.addItem({ name, groupId: st.groupId, placeId: st.placeId, qty: q, photoData: st.photo });
+          store.addItem({ name, groupId: st.groupId, placeId: st.placeId, qty: q, photoData: st.photo, tags: st.tags });
           toast(t('itemCreated'));
         }
         closeSheet();
@@ -181,6 +207,30 @@ export function openItemForm(itemId, presetPlace) {
   // Name bei Redraw (z. B. nach Foto) erhalten
   const origRedraw = h.redraw;
   h.redraw = () => { st.name = h.el.querySelector('#f-name')?.value ?? st.name; origRedraw(); };
+  // Menge ändern: überzählige Tag-Stücke werden von hinten gekürzt, die Tag-Zeilen neu berechnet
+  h.onQty = (v) => {
+    h.qty = v;
+    let over = sumTags() - v;
+    for (const k of Object.keys(st.tags).reverse()) {
+      if (over <= 0) break;
+      const cut = Math.min(st.tags[k], over); st.tags[k] -= cut; over -= cut;
+      if (st.tags[k] <= 0) delete st.tags[k];
+    }
+    h.redraw();
+  };
+  h.onTag = (tag, v) => {
+    const others = sumTags() - (st.tags[tag] || 0);
+    v = Math.max(0, Math.min(v, (h.qty ?? 1) - others));
+    if (v > 0) st.tags[tag] = v; else delete st.tags[tag];
+    h.redraw();
+  };
+  function addLocalTag(tag) {
+    const free = (h.qty ?? 1) - sumTags();
+    if (Object.keys(st.tags).length >= store.LIMITS.tagsPerEntry) { toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn'); return; }
+    if (free <= 0) { toast(t('noFreePieces'), 'warn'); return; }
+    st.tags[tag] = free;
+    h.redraw();
+  }
   if (!it) setTimeout(() => nameEl?.focus(), 250);
   return h;
 }

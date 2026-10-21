@@ -424,3 +424,19 @@ select.field { appearance: none; -webkit-appearance: none; background-image: lin
 .sugg-inline:empty { margin: 0; }
 .bn-input { margin-top: 10px; }
 .bn-input:disabled { opacity: .5; }
+.acc-h { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; padding: 0; color: inherit; text-align: left; cursor: pointer; }
+.acc-h h3 { margin: 0; flex: none; }
+.acc-sum { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 4px; color: var(--muted); font-size: 13px; font-weight: 700; overflow: hidden; }
+.acc-sum small { margin-left: 4px; }
+.acc-h .ic { flex: none; transition: transform .2s; color: var(--muted); }
+.acc.open .acc-h .ic { transform: rotate(180deg); }
+.acc-b { display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.acc.open .acc-b { display: block; }
+.sumdot { width: 22px; height: 22px; border-radius: 50%; background: var(--sw); border: 2px solid var(--border); }
+.pe-frame { position: relative; margin: 8px auto 12px; border-radius: 12px; overflow: hidden; background: #000; border: 2px solid var(--text); touch-action: none; }
+.pe-frame canvas { display: block; cursor: grab; touch-action: none; }
+.pe-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.35) 1px, transparent 1px); background-size: 33.333% 33.333%; opacity: .55; }
+.pe-tools { display: flex; gap: 10px; justify-content: center; }
+.pe-tools .btn { flex: 1; }
+.pe-zoom { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-weight: 700; font-size: 14px; color: var(--muted); }
+.pe-zoom input { flex: 1; accent-color: var(--accent); height: 28px; }

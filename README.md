@@ -8,7 +8,13 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
 
 - **Orte:** 3 voreingestellt, 2 bis 5 möglich. Das Symbol zeigt den Anfangsbuchstaben in passender Linienfarbe.
   Lange drücken ändert Zeichen, Farbe und Form.
-- **Artikel in Gruppen** (zwei Ebenen), Foto als kleines Vorschaubild (Kamera oder Galerie).
+- **Artikel in Gruppen** (zwei Ebenen), Foto als kleines Vorschaubild (Kamera oder Galerie). Nach der Auswahl öffnet der
+  **Foto-Editor**: mit zwei Knöpfen links/rechts drehen, mit Finger oder Regler (bzw. Mausrad) vergrößern und verschieben –
+  der Rahmen ist der Ausschnitt (quadratisch).
+- **Neuer Artikel** vergibt Tags und Stückzahl je Tag gleich beim Anlegen („Tags und Anzahl“); wird der Anfangsbestand
+  verkleinert, werden die Tag-Anzahlen von hinten entsprechend gekürzt.
+- **Mehr:** Orte, Gruppen, Tag-Verknüpfungen und Gruppenfarbe sind aufklappbare Abschnitte (Kopfzeile mit Kurzinfo,
+  der Zustand wird gemerkt), damit die Karte übersichtlich bleibt.
 - **Tags** als Etiketten zum Antippen. Ein Tag zählt **Stückzahlen**: Langarmshirt in „Wohnung“, Bestand 4, davon
   3 sauber und 1 schmutzig – der Artikel steht nur einmal in der Liste. Höchstens 6 verschiedene Tags je Artikel und Ort.
   Standard: sauber (glänzend), schmutzig (ockerfarbenes Pflegeetikett), verloren (indigo), beschädigt (grau). Weitere Tags über „+“.
@@ -90,7 +96,9 @@ js/store.js           Datenmodell, Persistenz (IndexedDB), alle Bestands-/Transp
 js/ui.js              Icons, Badge, Tag, Stepper, Sheets (mit Android-Zurück-Taste), Dialoge
 js/i18n.js            Texte de/en
 js/views/*.js         Start, Bestand, Artikel-Sheets, Transporte, Einstellungen
-js/sun.js, photo.js   Sonnenauf-/untergang, Vorschaubild
+js/sun.js             Sonnenauf-/untergang
+js/photo.js           Kamera/Galerie wählen
+js/photoedit.js       Foto-Editor (drehen, zoomen, quadratisch zuschneiden)
 sw.js, manifest.webmanifest, icons/
 ```
 
