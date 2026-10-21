@@ -6,6 +6,7 @@ import {
   PALETTE, SHAPES, placeLook, onLongPress, fmtTs, ui,
 } from '../ui.js';
 import { openTagForm } from './item.js';
+import { geocode, parseCoords, stations } from '../weather.js';
 
 const seg = (act, cur, opts) => `<div class="segmented">${opts.map(([v, label]) =>
   `<button type="button" class="${cur === v ? 'on' : ''}" data-act="${act}" data-v="${v}">${label}</button>`).join('')}</div>`;
@@ -27,6 +28,10 @@ export function renderSettings() {
     <section class="card"><h3>${t('appearance')}</h3>
       ${seg('set-theme', s.theme, [['auto', t('theme.auto')], ['system', t('theme.system')], ['dark', t('theme.dark')], ['light', t('theme.light')]])}
       <p class="hint">${t('theme.' + s.theme + 'Hint')}</p></section>
+
+    <section class="card"><h3>${t('wxSettings')}</h3>
+      <button type="button" class="switch ${s.weatherOn ? 'on' : ''}" data-act="wx-toggle" role="switch" aria-checked="${s.weatherOn}"><i></i><span>${t('wxShow')}</span></button>
+      <p class="hint">${t('wxSettingsHint')}</p></section>
 
     <section class="card"><h3>${t('places')} <small>${ps.length}/${store.LIMITS.places}</small></h3>
       <p class="hint">${t('badgeHint')}</p>
@@ -129,9 +134,8 @@ function openPlaceForm(id) {
       <div class="lbl">${t('look')}</div>
       <div class="look">${badge(q, 'xl')}<p class="hint">${t('badgeHint')}</p></div>
       <div class="lbl">${t('location')}</div>
-      <p class="hint">${q.lat != null ? `${icon('pin', 14)} ${q.lat.toFixed(4)}, ${q.lon.toFixed(4)}` : t('notLocated')}</p>
-      <div class="btn-grid"><button type="button" class="btn" data-act="pl-geo">${icon('gps')} ${t('saveLocation')}</button>
-        ${q.lat != null ? `<button type="button" class="btn btn--ghost" data-act="pl-geo-del">${icon('close')} ${t('removeLocation')}</button>` : ''}</div>
+      <p class="hint">${q.lat != null ? `${icon('pin', 14)} ${q.geoLabel ? esc(q.geoLabel) + '<br>' : ''}${Number(q.lat).toFixed(4)}, ${Number(q.lon).toFixed(4)}${q.station ? `<br>${t('locStation')}: ${esc(q.station.name)}` : ''}` : t('notLocated')}</p>
+      <button type="button" class="btn btn--block" data-act="pl-loc">${icon('pin')} ${t('locSheetBtn')}</button>
       <button class="linkbtn linkbtn--danger" type="button" data-act="pl-del">${icon('trash', 16)} ${t('placeDelete')}</button>`;
     },
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="pl-save">${icon('check')} ${t('save')}</button>`,
@@ -141,14 +145,7 @@ function openPlaceForm(id) {
         if (!name) { toast(t('nameReq'), 'warn'); return; }
         store.updatePlace(id, { name }); closeSheet();
       },
-      'pl-geo': () => {
-        const nameVal = h.el.querySelector('#pl-name').value;
-        if (!navigator.geolocation) { toast(t('geoFail'), 'warn'); return; }
-        navigator.geolocation.getCurrentPosition(
-          (pos) => { store.updatePlace(id, { lat: pos.coords.latitude, lon: pos.coords.longitude }); h.redraw(); h.el.querySelector('#pl-name').value = nameVal; toast(t('locationSaved')); window.dispatchEvent(new Event('st:detect')); },
-          () => toast(t('geoFail'), 'warn'), { enableHighAccuracy: true, timeout: 15000 });
-      },
-      'pl-geo-del': () => { store.updatePlace(id, { lat: null, lon: null }); },
+      'pl-loc': () => openLocationSheet(id),
       'pl-del': async () => {
         const why = store.placeBlocker(id);
         if (why) { toast(t('placeBlock.' + why), 'warn'); return; }
@@ -168,6 +165,125 @@ function openPlaceForm(id) {
     if (v != null) h.el.querySelector('#pl-name').value = v;
   };
 }
+
+/* ---------- Standort & Wetter eines Ortes ---------- */
+/**
+ * Standort per Adresse/Ort/Koordinaten oder GPS festlegen; dazu eine Wetterstation aus der Umgebung wählen.
+ * Der Standort dient der Ortserkennung, dem Sonnenstand und dem Wetter.
+ */
+export function openLocationSheet(placeId) {
+  const p0 = store.place(placeId);
+  if (!p0) return;
+  const st = { lat: p0.lat ?? null, lon: p0.lon ?? null, label: p0.geoLabel || '', station: p0.station || null, stations: null, stationsErr: false, results: [] };
+  const coordsOk = () => st.lat != null && st.lon != null && Number.isFinite(st.lat) && Number.isFinite(st.lon);
+  const num = (v) => (v == null ? '' : String(Math.round(Number(v) * 10000) / 10000));
+  const $ = (sel) => h.el.querySelector(sel);
+
+  function paintCoords() { $('#loc-lat').value = num(st.lat); $('#loc-lon').value = num(st.lon); $('#loc-label').textContent = st.label; }
+  function paintResults() {
+    $('#loc-results').innerHTML = st.results.map((r, i) => `<button type="button" class="boxcard" data-act="loc-pick" data-i="${i}">${icon('pin', 18)} <span class="loc-name">${esc(r.label)}</span></button>`).join('');
+  }
+  function paintStations() {
+    const sel = $('#loc-station');
+    const opts = [`<option value="">${esc(t('locStationAuto'))}</option>`];
+    const list = [...(st.stations || [])];
+    if (st.station && !list.some((s) => s.id === st.station.id)) list.unshift({ id: st.station.id, name: st.station.name, km: null });
+    for (const s of list) opts.push(`<option value="${esc(s.id)}" data-name="${esc(s.name)}" ${st.station?.id === s.id ? 'selected' : ''}>${esc(s.name)}${s.km != null ? ` (${s.km} km)` : ''}</option>`);
+    if (coordsOk() && st.stations === null && !st.stationsErr) opts.push(`<option disabled>${esc(t('locStationLoading'))}</option>`);
+    if (st.stationsErr) opts.push(`<option disabled>${esc(t('locStationErr'))}</option>`);
+    sel.innerHTML = opts.join('');
+    sel.disabled = !coordsOk();
+  }
+  async function loadStations() {
+    if (!coordsOk()) { st.stations = null; paintStations(); return; }
+    st.stations = null; st.stationsErr = false; paintStations();
+    const key = `${st.lat},${st.lon}`;
+    try {
+      const list = await stations(st.lat, st.lon);
+      if (key !== `${st.lat},${st.lon}`) return;
+      st.stations = list;
+    } catch { st.stationsErr = true; }
+    paintStations();
+  }
+  function setCoords(lat, lon, label) {
+    st.lat = lat; st.lon = lon; st.label = label || ''; st.station = null; st.stations = null; st.results = [];
+    paintCoords(); paintResults(); loadStations();
+  }
+
+  const h = openSheet({
+    title: t('locTitle'),
+    render: () => `
+      <p class="hint">${t('locHint')}</p>
+      <label class="lbl" for="loc-q">${t('locSearch')}</label>
+      <div class="inline"><input id="loc-q" class="field" type="search" placeholder="${t('locSearchPh')}" autocomplete="off" enterkeyhint="search">
+        <button class="btn" type="button" data-act="loc-search" aria-label="${t('locSearch')}">${icon('search')}</button></div>
+      <div id="loc-results" class="boxlist"></div>
+      <div class="lbl">${t('locCoords')}</div>
+      <div class="coords">
+        <label>${t('locLat')}<input id="loc-lat" class="field" inputmode="decimal" autocomplete="off"></label>
+        <label>${t('locLon')}<input id="loc-lon" class="field" inputmode="decimal" autocomplete="off"></label></div>
+      <div id="loc-label" class="hint"></div>
+      <div class="btn-grid"><button class="btn" type="button" data-act="loc-gps">${icon('gps')} ${t('locGps')}</button>
+        <button class="btn btn--ghost" type="button" data-act="loc-clear">${icon('close')} ${t('removeLocation')}</button></div>
+      <div class="lbl">${t('locStation')}</div>
+      <select id="loc-station" class="field"></select>
+      <p class="hint">${t('locStationHint')}</p>`,
+    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="loc-save">${icon('check')} ${t('save')}</button>`,
+    mount: () => {},
+    actions: {
+      'loc-search': async () => {
+        const q = $('#loc-q').value.trim();
+        if (!q) return;
+        const c = parseCoords(q);
+        if (c) { setCoords(c.lat, c.lon, ''); return; }
+        $('#loc-results').innerHTML = `<p class="hint">${t('locSearching')}</p>`;
+        try {
+          st.results = await geocode(q);
+          paintResults();
+          if (!st.results.length) $('#loc-results').innerHTML = `<p class="hint">${t('noResults')}</p>`;
+        } catch { $('#loc-results').innerHTML = `<p class="hint">${t('locSearchFail')}</p>`; }
+      },
+      'loc-pick': (el) => { const r = st.results[Number(el.dataset.i)]; if (r) setCoords(r.lat, r.lon, r.label); },
+      'loc-gps': () => {
+        if (!navigator.geolocation) { toast(t('geoFail'), 'warn'); return; }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => setCoords(pos.coords.latitude, pos.coords.longitude, t('locGpsLabel')),
+          () => toast(t('geoFail'), 'warn'), { enableHighAccuracy: true, timeout: 15000 });
+      },
+      'loc-clear': () => setCoords(null, null, ''),
+      'loc-save': () => {
+        const lat = $('#loc-lat').value.trim() === '' ? null : Number($('#loc-lat').value.replace(',', '.'));
+        const lon = $('#loc-lon').value.trim() === '' ? null : Number($('#loc-lon').value.replace(',', '.'));
+        if ((lat == null) !== (lon == null) || (lat != null && (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180))) {
+          toast(t('locBadCoords'), 'warn'); return;
+        }
+        store.updatePlace(placeId, lat == null
+          ? { lat: null, lon: null, geoLabel: '', station: null }
+          : { lat, lon, geoLabel: st.label, station: st.station });
+        toast(t('locationSaved'));
+        window.dispatchEvent(new Event('st:detect'));
+        closeSheet();
+      },
+    },
+  });
+  paintCoords(); paintResults(); paintStations();
+  h.el.addEventListener('change', (e) => {
+    if (e.target.id === 'loc-lat' || e.target.id === 'loc-lon') {
+      const lat = Number($('#loc-lat').value.replace(',', '.')); const lon = Number($('#loc-lon').value.replace(',', '.'));
+      const ok = $('#loc-lat').value.trim() !== '' && $('#loc-lon').value.trim() !== '' && Number.isFinite(lat) && Number.isFinite(lon);
+      st.label = ''; $('#loc-label').textContent = '';
+      if (ok) { st.lat = lat; st.lon = lon; st.station = null; loadStations(); }
+    }
+    if (e.target.id === 'loc-station') {
+      const o = e.target.selectedOptions[0];
+      st.station = e.target.value ? { id: e.target.value, name: o.dataset.name || o.textContent } : null;
+    }
+  });
+  h.el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'loc-q') { e.preventDefault(); h.opts.actions['loc-search'](); } });
+  if (coordsOk()) loadStations();
+  return h;
+}
+actions['place-loc'] = (el) => openLocationSheet(el.dataset.id);
 
 /* ---------- Badge-Editor (langes Drücken) ---------- */
 export function openBadgeEditor(placeId) {
@@ -272,7 +388,8 @@ function download(name, text, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 const stamp = () => new Date().toISOString().slice(0, 10);
-actions['exp-json'] = () => { download(`stufftracker-${stamp()}.json`, store.exportJson(), 'application/json'); toast(t('exported')); };
+actions['exp-json'] = () => { download(`stufftracker-${stamp()}.json`, store.exportJson(), 'application/json'); store.markBackup(); toast(t('exported')); };
+actions['wx-toggle'] = () => store.setSetting('weatherOn', !store.settings().weatherOn);
 actions['exp-csv'] = () => { download(`stufftracker-${stamp()}.csv`, store.exportCsv(), 'text/csv;charset=utf-8'); toast(t('exported')); };
 actions['imp-json'] = () => {
   const input = document.createElement('input');

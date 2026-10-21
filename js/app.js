@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import { t, setLang, getLang, resolveLang } from './i18n.js';
 import { ui, icon, refreshSheets, actions, toast } from './ui.js';
-import { renderHome } from './views/home.js';
+import { renderHome, afterHome } from './views/home.js';
 import { renderStock, refreshStock } from './views/stock.js';
 import { renderTransport } from './views/transport.js';
 import { renderSettings } from './views/settings.js';
@@ -10,7 +10,7 @@ import './views/item.js';
 import { isDaytime } from './sun.js';
 
 const TABS = {
-  home: { render: renderHome, icon: 'home', color: '#EE352E' },
+  home: { render: renderHome, after: afterHome, icon: 'home', color: '#EE352E' },
   stock: { render: renderStock, icon: 'stock', color: '#00933C' },
   transport: { render: renderTransport, icon: 'transport', color: '#FCCC0A', dark: true },
   more: { render: renderSettings, icon: 'more', color: '#A7A9AC' },
@@ -36,6 +36,7 @@ function render(keepScroll = true) {
   renderNav();
   const ib = document.getElementById('install-btn');
   if (ib && deferredInstall) ib.hidden = false;
+  TABS[ui.tab].after?.();
 }
 let raf = 0;
 function schedule() {

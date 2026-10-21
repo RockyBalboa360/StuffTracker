@@ -20,11 +20,11 @@ export function transportCard(tr) {
   const date = tr.status === 'sent' ? t('since', { d: fmtDate(tr.sentAt) })
     : tr.status === 'arrived' ? t('arrivedOn', { d: fmtDate(tr.arrivedAt) })
     : tr.status === 'cancelled' ? t('cancelledOn', { d: fmtDate(tr.cancelledAt) }) : '';
+  const groups = new Set(tr.lines.map((l) => store.item(l.itemId)?.groupId).filter(Boolean)).size;
+  const info = [groups === 1 ? t('nGroup1') : t('nGroups', { n: groups }), t('nArticlesTotal', { n }), date].filter(Boolean).join(' · ');
   return `<button class="tcard tcard--${tr.status}" type="button" data-act="tr-open" data-id="${tr.id}">
     ${routeHtml(tr, 'md')}
-    <span class="tcard-main"><b>${esc(tr.name)}</b>
-      <span class="muted">${t('nPieces', { n })} · ${t('nLines', { n: tr.lines.length })}</span>
-      ${date ? `<span class="muted">${esc(date)}</span>` : ''}</span>
+    <span class="tcard-main"><b>${esc(tr.name)}</b><span class="muted">${esc(info)}</span></span>
     <span class="status status--${tr.status}">${statusLabel(tr.status)}</span>
   </button>`;
 }

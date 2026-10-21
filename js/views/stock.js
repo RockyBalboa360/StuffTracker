@@ -22,11 +22,12 @@ export function groupAccent() {
   return (free || ACCENT_FAMILIES[0])[0];
 }
 
-function haystack(it) {
+/** Suchtext eines Artikels: Name, Gruppe und Tags (nur die am Ort pid, ohne pid an allen Orten). Orte werden hier nicht durchsucht. */
+export function haystack(it, pid) {
   const parts = [store.nm(it), store.nm(store.group(it.groupId))];
-  for (const [pid, e] of Object.entries(it.stock)) {
+  for (const [id, e] of Object.entries(it.stock)) {
+    if (pid && id !== pid) continue;
     Object.keys(e.tags).forEach((g) => parts.push(store.nm(store.tag(g))));
-    if (e.qty > 0) parts.push(store.place(pid)?.name || '');
   }
   return parts.join(' ').toLowerCase();
 }
@@ -68,15 +69,19 @@ function row(it, pid, all) {
     <span class="row-qty ${low ? 'low' : ''}">${low ? icon('alert', 16) : ''}<b>${qty}</b></span>
   </button>`;
 }
+/** Zeile in der Ansicht „Alle“ (auch für die Suche auf der Startseite). */
+export const rowAll = (it) => row(it, null, true);
+
 function listHtml() {
   const q = ui.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const sp = selPlace();
-  const all = sp === 'all' || q.length > 0;
+  const all = sp === 'all';
+  // Die Suche gilt im aktiven Ort (in „Alle“ über alle Orte).
   const list = store.sortedItems().filter((it) => {
-    if (q.length) { const h = haystack(it); return q.every((w) => h.includes(w)); }
-    if (sp === 'all') return true;
-    const e = it.stock[sp];
-    return !!e && (e.qty > 0 || e.min?.on);
+    if (!all) { const e = it.stock[sp]; if (!(e && (e.qty > 0 || e.min?.on))) return false; }
+    if (!q.length) return true;
+    const h = haystack(it, all ? null : sp);
+    return q.every((w) => h.includes(w));
   });
   if (!list.length) {
     return `<div class="empty">${icon('search', 36)}<p>${q.length ? t('noResults') : t('emptyPlace')}</p></div>`;
@@ -110,11 +115,11 @@ const syncAllBtn = () => { const b = document.getElementById('grp-all'); if (b) 
 function activePlace(sp) {
   if (sp === 'all') {
     return `<div class="active-place active-place--all"><span class="all-dot">∗</span>
-      <div><small>${t('viewing')}</small><b>${t('allPlaces')}</b></div></div>`;
+      <div><b>${t('allPlaces')}</b></div></div>`;
   }
   const p = store.place(sp);
   return `<div class="active-place">${badge(p, 'xl')}
-    <div><small>${t('viewing')}</small><b>${esc(p.name)}</b></div></div>`;
+    <div><b>${esc(p.name)}</b></div></div>`;
 }
 
 export function renderStock() {

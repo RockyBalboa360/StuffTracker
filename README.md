@@ -19,7 +19,15 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
   um 1 und umgekehrt. Andere Tags nehmen zuerst Stücke ohne Tag, dann vom größten anderen Tag.
   Die Reihenfolge der Verknüpfungen ist die Priorität (mit Pfeilen änderbar): Kommt ein Tag in mehreren Verknüpfungen vor,
   wirken die späteren überwiegend nur in eine Richtung.
-- **Bestand:** Oben zeigt eine große Anzeige den aktiven Ort (Ortsfarbe als Streifen), die Buchstaben-Kacheln der Artikel
+- **Startseite:** Ort-Buttons oben (Dashboard des Ortes), darunter Datum und Datum der letzten Änderung, Suche über alle Daten
+  (Artikel, Gruppen, Tags, Orte, Kisten), Kennzahlen (die Kachel „Artikel“ springt in die Bestandsliste), Schnellaktionen
+  (neuer Artikel, neue Kiste), **Wetter** (aktuell, nächste 3 Stunden, morgen, Sonnenauf-/untergang, Zeitpunkt der Abfrage),
+  Warnungen, Tag-Übersicht des Ortes, Kisten unterwegs und ein Hinweis zur Datensicherung (nach mehr als 9 Tagen).
+- **Wetter:** DWD über [Bright Sky](https://brightsky.dev); außerhalb Deutschlands automatisch MET Norway (api.met.no).
+  Der Standort eines Ortes wird unter *Mehr → Orte → Ort bearbeiten → Standort & Wetter einstellen* per Adresse, Ort,
+  Koordinaten oder GPS festgelegt; dort wählt man auch eine Wetterstation (Auswahlliste). Abschalten: *Mehr → Wetter*.
+  Zwischenspeicher: höchstens alle 15 Minuten neu, offline wird der letzte Stand gezeigt.
+- **Bestand:** Die Suche gilt im aktiven Ort (in „Alle“ über alle Orte). Oben zeigt eine große Anzeige den aktiven Ort (Ortsfarbe als Streifen), die Buchstaben-Kacheln der Artikel
   haben die Farbe des Ortes (in „Alle“ ein dunkles Grau). Der Balken an den Gruppen ist Subway-Grün und wechselt automatisch
   auf eine freie Farbe, sobald ein Ort Grün verwendet.
 - **Menge** je Ort per Stepper (− / + / Zahl antippen für Zahlenfeld, gedrückt halten für Wiederholung).

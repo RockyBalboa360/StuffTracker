@@ -133,9 +133,9 @@ export function openPhotoSheet(itemId, onPick) {
 }
 
 /* ================= Artikel anlegen / bearbeiten ================= */
-export function openItemForm(itemId) {
+export function openItemForm(itemId, presetPlace) {
   const it = itemId ? store.item(itemId) : null;
-  const cur = store.currentPlaceId();
+  const cur = store.place(presetPlace) ? presetPlace : store.currentPlaceId();
   const st = { name: it ? store.nm(it) : '', groupId: it?.groupId || store.groups()[0]?.id, placeId: cur, qty: 1, photo: null, photoSet: false };
   const h = openSheet({
     title: it ? t('edit') : t('itemNew'),

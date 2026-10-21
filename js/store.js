@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.6.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 4, tagsTotal: 16 };
 
 let data = null;
@@ -77,6 +77,13 @@ function migrate(d) {
     d.transports.forEach((tr) => tr.lines.forEach((l) => { l.tags ||= {}; trimTags(l.tags, l.qty); }));
     d.v = 4;
   }
+  if (d.v < 5) {
+    // v5: Wetter-Schalter, Sicherungs-Zeitpunkt
+    d.settings.weatherOn ??= true;
+    d.settings.created ||= Date.now();
+    d.settings.lastBackup ??= null;
+    d.v = 5;
+  }
   d.settings.homeButtons ||= 'dashboard';
   return d;
 }
@@ -104,8 +111,10 @@ export function init(lang) {
 
 export const subscribe = (fn) => { subs.add(fn); return () => subs.delete(fn); };
 const notify = () => subs.forEach((f) => f());
-function mutate(fn) {
+/** touch=false: Einstellungen zählen nicht als „letzte Änderung“ der Daten. */
+function mutate(fn, touch = true) {
   const r = fn();
+  if (touch) data.changed = Date.now();
   scheduleSave();
   notify();
   return r;
@@ -191,8 +200,11 @@ export function setGeo(lat, lon) {
 }
 
 /* ---------- Einstellungen ---------- */
-export function setSetting(k, v) { mutate(() => { data.settings[k] = v; }); }
-export function setWidget(patch) { mutate(() => { Object.assign(data.settings.widget, patch); }); }
+export function setSetting(k, v) { mutate(() => { data.settings[k] = v; }, false); }
+export function setWidget(patch) { mutate(() => { Object.assign(data.settings.widget, patch); }, false); }
+/** Zeitpunkt der letzten Datenänderung (Bestand, Tags, Kisten, Orte …). */
+export const lastChange = () => data.changed || data.log[0]?.ts || Math.max(0, ...data.items.map((i) => i.createdAt || 0)) || null;
+export const markBackup = () => setSetting('lastBackup', Date.now());
 
 /* ---------- Protokoll ---------- */
 function addLog(type, o = {}) {
@@ -623,11 +635,12 @@ function seed(lang, empty = false) {
     { id: 'tg_damaged', key: 'tag.damaged', style: 'damaged' },
   ];
   const d = {
-    v: 4,
+    v: 5,
     tagLinks: [['tg_clean', 'tg_dirty']],
     settings: {
       lang: 'auto', theme: 'auto', placeMode: 'auto', manualPlace: null, lastPlace: null, lastGeo: null,
       homeButtons: 'dashboard', boxCounter: 0, sampleCleared: empty,
+      weatherOn: true, created: Date.now(), lastBackup: null,
       widget: { on: true, size: 'large', kind: 'place', id: 'current' },
     },
     places: pl, groups, tags: tg, items: [], transports: [], retired: [], log: [],
