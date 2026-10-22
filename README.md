@@ -11,6 +11,16 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
 - **Artikel in Gruppen** (zwei Ebenen), Foto als kleines Vorschaubild (Kamera oder Galerie). Nach der Auswahl öffnet der
   **Foto-Editor**: mit zwei Knöpfen links/rechts drehen, mit Finger oder Regler (bzw. Mausrad) vergrößern und verschieben –
   der Rahmen ist der Ausschnitt (quadratisch).
+- **Heller Modus:** Schilder (Kopf, Gruppen, Wetter, Kacheln, Fußleiste, Dialog-Köpfe) sind weiß mit schwarzer Linie, der
+  Hintergrund ist ein ruhiges Hellgrau ohne Karomuster.
+- **Mindestbestand:** Warnung wahlweise *beim Unterschreiten* (weniger als n) oder *beim Erreichen* (n oder weniger) – das
+  zweite ist für Dinge, die es nur ein- bis zweimal gibt.
+- **Neuer Artikel:** Bezeichnung mit Textvorschlägen aus bekannten Artikeln. Gibt es die Bezeichnung schon (Groß-/Kleinschreibung
+  und Leerzeichen egal), fragt die App, ob zusammengeführt werden soll (Gruppe/Foto bleiben, neuer Bestand mit Tags wird am
+  gewählten Ort zugebucht). Lehnt man ab, muss man die Bezeichnung ändern – zwei gleich benannte Artikel gibt es nicht.
+- **In Kiste:** Links der Bestand (gesamt und je Tag), rechts die Menge für die Kiste (Start 0, Pfeil dazwischen). Was rechts
+  erhöht wird, geht links ab; die Tags bestimmen die Gesamtmenge mit. Darunter „Vorhandene Kiste“ oder „Neue Kiste“ (Ziel + Name).
+- **Wischen:** Auf Start und Bestand wechselt eine Wischgeste nach links/rechts den Ort (im Bestand mit „Alle“ vorn).
 - **Zu-/Abgang buchen** (Artikel → Ort → „Zu-/Abgang“): größere Mengen mit Tags zubuchen (Neukauf) oder abbuchen (Verbrauch).
   Links die Tags (bestehende, weitere aktivierbar, neue anlegbar), rechts die Anzahl, alle starten bei 0. Anders als eine Kiste
   ändert das die **Gesamtmenge**. Beim Zugang kann alles direkt in eine bestehende oder neue Kiste gelegt werden; Abgang nimmt

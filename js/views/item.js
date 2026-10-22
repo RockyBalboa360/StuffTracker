@@ -167,6 +167,7 @@ export function openItemForm(itemId, presetPlace) {
     render: (hh) => `
       <label class="lbl" for="f-name">${t('name')}</label>
       <input id="f-name" class="field" type="text" maxlength="60" value="${esc(st.name)}" placeholder="${t('namePh')}" autocomplete="off">
+      <div class="chips sugg-inline" id="f-sugg"></div>
       <label class="lbl" for="f-group">${t('group')}</label>
       <select id="f-group" class="field">${store.groups().map((g) => `<option value="${g.id}" ${g.id === st.groupId ? 'selected' : ''}>${esc(store.nm(g))}</option>`).join('')}</select>
       ${it ? '' : `
@@ -191,15 +192,38 @@ export function openItemForm(itemId, presetPlace) {
       'f-photo': () => openPhotoSheet(null, (data) => { st.photo = data; st.photoSet = true; h.redraw(); }),
       'nf-tag-add': (el) => addLocalTag(el.dataset.tag),
       'nf-tag-new': () => openTagForm(null, (g) => { if (g) addLocalTag(g.id); }),
-      'f-save': () => {
-        const name = h.el.querySelector('#f-name').value.trim();
-        if (!name) { toast(t('nameReq'), 'warn'); h.el.querySelector('#f-name').focus(); return; }
+      'f-sugg': (el) => {
+        const nameInput = h.el.querySelector('#f-name');
+        nameInput.value = el.dataset.v;
+        h.el.querySelector('#f-sugg').innerHTML = '';
+        const known = store.findByName(el.dataset.v, it?.id);
+        if (known && !it) { st.groupId = known.groupId; h.el.querySelector('#f-group').value = known.groupId; }
+      },
+      'f-save': async () => {
+        const nameInput = h.el.querySelector('#f-name');
+        const name = nameInput.value.trim();
+        if (!name) { toast(t('nameReq'), 'warn'); nameInput.focus(); return; }
+        const dup = store.findByName(name, it?.id);
         if (it) {
+          if (dup) { toast(t('nameTaken'), 'warn'); nameInput.focus(); return; }
           store.updateItem(it.id, { name, groupId: st.groupId });
         } else {
           const q = h.qty ?? 1;
-          store.addItem({ name, groupId: st.groupId, placeId: st.placeId, qty: q, photoData: st.photo, tags: st.tags });
-          toast(t('itemCreated'));
+          if (dup) {
+            // Gleiche Bezeichnung gibt es schon: Zusammenführen anbieten, sonst muss der Name geändert werden.
+            const place = store.place(st.placeId);
+            const yes = await confirmDialog({
+              title: t('mergeTitle'),
+              text: t('mergeText', { name: store.nm(dup), group: store.nm(store.group(dup.groupId)), total: store.totalQty(dup), n: q, place: place?.name || '' }),
+              ok: t('mergeYes'), cancel: t('mergeNo'),
+            });
+            if (!yes) { toast(t('nameTaken'), 'warn'); nameInput.focus(); nameInput.select(); return; }
+            if (!store.mergeStock(dup.id, st.placeId, { qty: q, tags: st.tags, photoData: st.photo })) { toast(t('bookFail'), 'warn'); return; }
+            toast(t('merged', { name: store.nm(dup), n: q }));
+          } else {
+            store.addItem({ name, groupId: st.groupId, placeId: st.placeId, qty: q, photoData: st.photo, tags: st.tags });
+            toast(t('itemCreated'));
+          }
         }
         closeSheet();
       },
@@ -207,6 +231,15 @@ export function openItemForm(itemId, presetPlace) {
   });
   h.qty = 1;
   h.el.addEventListener('change', (e) => { if (e.target.id === 'f-group') st.groupId = e.target.value; });
+  // Textvorschläge aus bereits bekannten Bezeichnungen (nur beim Anlegen)
+  if (!it) {
+    h.el.addEventListener('input', (e) => {
+      if (e.target.id !== 'f-name') return;
+      const box = h.el.querySelector('#f-sugg');
+      box.innerHTML = store.suggestNames(e.target.value).map((n) => `<button type="button" class="chip chip--sugg" data-act="f-sugg" data-v="${esc(n)}">${esc(n)}</button>`).join('');
+    });
+    h.el.addEventListener('pointerdown', (e) => { if (e.target.closest('#f-sugg button')) e.preventDefault(); });
+  }
   const nameEl = h.el.querySelector('#f-name');
   // Name bei Redraw (z. B. nach Foto) erhalten
   const origRedraw = h.redraw;
@@ -241,9 +274,13 @@ export function openItemForm(itemId, presetPlace) {
 actions['item-new'] = () => openItemForm(null);
 
 /* ================= In Transport legen ================= */
-stepHandlers['mv-qty'] = (_a, v) => topSheet()?.onQty?.(v);
-stepHandlers['mv-tag'] = (a, v) => topSheet()?.onTag?.(a.tag, v);
+stepHandlers['mv-l'] = (a, v) => topSheet()?.onPair?.('l', a.k, v);
+stepHandlers['mv-r'] = (a, v) => topSheet()?.onPair?.('r', a.k, v);
 
+/**
+ * Stücke in eine Kiste legen. Links der Bestand am Ort (gesamt und je Tag), rechts die Menge in der Kiste (startet bei 0):
+ * Was rechts erhöht wird, geht links vom Bestand ab. Die Tag-Mengen bestimmen die Gesamtmenge der Kiste.
+ */
 export function openMove(itemId, placeId) {
   const it = store.item(itemId);
   const from = store.place(placeId);
@@ -252,43 +289,82 @@ export function openMove(itemId, placeId) {
   const others = store.places().filter((p) => p.id !== placeId);
   const drafts = store.transports().filter((x) => x.status === 'draft' && x.from === placeId);
   const free = store.freeTags(it, placeId);
-  const st = { sel: drafts[0]?.id || 'new', dest: others[0]?.id, qty: 1, name: '', choice: '', manual: false, alloc: store.defaultAlloc(it, placeId, 1) };
-  const total = (o) => Object.values(o).reduce((a, b) => a + b, 0);
-  const tagRows = () => {
-    const rows = store.tags().filter((g) => free[g.id] > 0);
-    if (!rows.length) return '';
-    return `<div class="lbl">${t('ofThose')}</div>
-      ${rows.map((g) => `<div class="tagline">${tagChip(g)}${stepper({ value: st.alloc[g.id] || 0, min: 0, max: Math.min(free[g.id], st.qty), on: 'mv-tag', args: { tag: g.id } })}</div>`).join('')}
-      <p class="hint">${t('allocHint')}</p>`;
-  };
+  const freePlain = Math.max(0, avail - Object.values(free).reduce((a, b) => a + b, 0));
+  const tagRows = store.tags().filter((g) => free[g.id] > 0);
+  const st = { mode: drafts.length ? 'existing' : 'new', sel: drafts[0]?.id || null, dest: others[0]?.id, name: '', choice: '', alloc: {}, plain: 0 };
+  const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+  const total = () => sum(st.alloc) + st.plain;
+  const maxOf = (k) => (k === 'total' ? avail : k === 'plain' ? freePlain : free[k] || 0);
+  const curOf = (k) => (k === 'total' ? total() : k === 'plain' ? st.plain : st.alloc[k] || 0);
+
+  /** Gesamtmenge der Kiste ändern: mehr -> zuerst Stücke ohne Tag, dann Tags der Reihe nach; weniger -> umgekehrt. */
+  function setTotal(v) {
+    v = Math.max(0, Math.min(v, avail));
+    let diff = v - total();
+    if (diff > 0) {
+      const add = Math.min(diff, freePlain - st.plain); st.plain += add; diff -= add;
+      for (const g of tagRows) {
+        if (diff <= 0) break;
+        const a = Math.min(diff, free[g.id] - (st.alloc[g.id] || 0));
+        if (a > 0) { st.alloc[g.id] = (st.alloc[g.id] || 0) + a; diff -= a; }
+      }
+    } else if (diff < 0) {
+      let rem = -diff;
+      const c = Math.min(rem, st.plain); st.plain -= c; rem -= c;
+      for (const g of [...tagRows].reverse()) {
+        if (rem <= 0) break;
+        const a = Math.min(rem, st.alloc[g.id] || 0);
+        if (a > 0) { st.alloc[g.id] -= a; rem -= a; if (st.alloc[g.id] <= 0) delete st.alloc[g.id]; }
+      }
+    }
+  }
+  function setKey(k, v) {
+    v = Math.max(0, Math.min(v, maxOf(k)));
+    if (k === 'total') setTotal(v);
+    else if (k === 'plain') st.plain = v;
+    else if (v > 0) st.alloc[k] = v; else delete st.alloc[k];
+  }
+  const pair = (label, k) => `<div class="mvrow">
+      <div class="mvlab">${label}</div>
+      <div class="mvpair">
+        ${stepper({ value: maxOf(k) - curOf(k), min: 0, max: maxOf(k), on: 'mv-l', args: { k }, cls: 'stepper--c' })}
+        ${arrow('mini')}
+        ${stepper({ value: curOf(k), min: 0, max: maxOf(k), on: 'mv-r', args: { k }, cls: 'stepper--c' })}
+      </div></div>`;
+
   const h = openSheet({
     title: t('toBox'),
     render: () => `
       <div class="strip">${thumb(it, 'sm')} <div><b>${esc(store.nm(it))}</b><div class="muted">${badge(from, 'xs')} ${esc(from.name)} · ${t('freeN', { n: avail })}</div></div></div>
-      <div class="lbl">${t('amount')}</div>
-      <div class="pad">${stepper({ value: st.qty, min: 1, max: avail, on: 'mv-qty' })}</div>
-      ${tagRows()}
+      <p class="hint">${t('mvHint')}</p>
+      <div class="mvhead"><span>${t('mvStock', { place: esc(from.name) })}</span><span>${t('mvBox')}</span></div>
+      ${pair(`<b>${t('totalQty')}</b>`, 'total')}
+      ${tagRows.map((g) => pair(tagChip(g), g.id)).join('')}
+      ${freePlain > 0 && tagRows.length ? pair(`<span class="tag-ph">${t('noTag')}</span>`, 'plain') : ''}
       <div class="lbl">${t('whichBox')}</div>
-      <div class="boxlist">
+      <p class="hint">${t('boxExplain')}</p>
+      ${drafts.length ? `<div class="segmented">
+        <button type="button" class="${st.mode === 'existing' ? 'on' : ''}" data-act="mv-mode" data-v="existing">${t('boxExisting')}</button>
+        <button type="button" class="${st.mode === 'new' ? 'on' : ''}" data-act="mv-mode" data-v="new">${icon('plus', 16)} ${t('boxNew')}</button>
+      </div>` : ''}
+      ${st.mode === 'existing' ? `<div class="boxlist mv-gap">
         ${drafts.map((d) => `<button type="button" class="boxcard ${st.sel === d.id ? 'on' : ''}" data-act="mv-sel" data-id="${d.id}">
             <span class="routes">${badge(from, 'xs')}${arrow('mini')}${badge(store.place(d.to), 'xs')}</span>
             <b>${esc(d.name)}</b><span class="muted">${t('nLines', { n: d.lines.length })}</span></button>`).join('')}
-        <button type="button" class="boxcard boxcard--new ${st.sel === 'new' ? 'on' : ''}" data-act="mv-sel" data-id="new">
-          ${icon('plus', 20)} <b>${t('boxNew')}</b></button>
-      </div>
-      ${st.sel === 'new' ? `
+      </div>` : `
         <div class="lbl">${t('destination')}</div>
         <div class="chips">${others.map((p) => `<button type="button" class="chip chip--badge ${p.id === st.dest ? 'on' : ''}" data-act="mv-dest" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
-        ${boxNameHtml(st)}` : ''}`,
-    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="mv-ok">${icon('box')} ${t('toBox')}</button>`,
+        ${boxNameHtml(st)}`}`,
+    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="mv-ok">${icon('box')} ${t('toBox')}${total() ? ` (${total()})` : ''}</button>`,
     actions: {
-      'mv-sel': (el) => { st.sel = el.dataset.id; redraw(); },
+      'mv-mode': (el) => { st.mode = el.dataset.v; h.redraw(); },
+      'mv-sel': (el) => { st.sel = el.dataset.id; h.redraw(); },
       'mv-dest': (el) => { st.dest = el.dataset.id; h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el)); },
       'mv-ok': () => {
-        const q = Math.min(st.qty, avail);
-        const name = boxNameValue(st);
-        let tid = st.sel;
-        if (tid === 'new') tid = store.createTransport({ from: placeId, to: st.dest, name }).id;
+        const q = total();
+        if (q <= 0) { toast(t('mvPickQty'), 'warn'); return; }
+        let tid = st.mode === 'existing' ? st.sel : null;
+        if (!tid) tid = store.createTransport({ from: placeId, to: st.dest, name: boxNameValue(st) }).id;
         if (!store.addLine(tid, itemId, q, { ...st.alloc })) { toast(t('nothingFree'), 'warn'); return; }
         toast(t('movedToBox', { n: q, box: store.nm(store.transport(tid)) }));
         closeSheet();
@@ -296,20 +372,9 @@ export function openMove(itemId, placeId) {
     },
   });
   bindBoxName(h, st);
-  function redraw() {
+  h.onPair = (side, k, v) => {
+    setKey(k, side === 'l' ? maxOf(k) - v : v);
     h.redraw();
-  }
-  h.onQty = (v) => {
-    st.qty = v;
-    if (!st.manual || total(st.alloc) > v) st.alloc = store.defaultAlloc(it, placeId, v);
-    redraw();
-  };
-  h.onTag = (tag, v) => {
-    st.manual = true;
-    const others2 = total(st.alloc) - (st.alloc[tag] || 0);
-    v = Math.max(0, Math.min(v, free[tag] || 0, st.qty - others2));
-    if (v > 0) st.alloc[tag] = v; else delete st.alloc[tag];
-    redraw();
   };
   return h;
 }
@@ -464,12 +529,18 @@ export function openRetire(itemId, placeId) {
 /* ================= Mindestbestand ================= */
 export function openMin(itemId, placeId) {
   const e = store.item(itemId).stock[placeId];
-  const st = { on: !!e?.min?.on, tag: store.minTagId(e) };
+  const st = { on: !!e?.min?.on, tag: store.minTagId(e), mode: store.minMode(e) };
   const h = openSheet({
     title: t('minTitle'),
     render: (hh) => `
       <p class="hint">${t('minHint')}</p>
       <button type="button" class="switch ${st.on ? 'on' : ''}" data-act="mn-toggle" role="switch" aria-checked="${st.on}"><i></i><span>${t('minActive')}</span></button>
+      <div class="lbl">${t('minWhen')}</div>
+      <div class="segmented">
+        <button type="button" class="${st.mode === 'below' ? 'on' : ''}" data-act="mn-mode" data-v="below">${t('minBtnBelow')}</button>
+        <button type="button" class="${st.mode === 'reach' ? 'on' : ''}" data-act="mn-mode" data-v="reach">${t('minBtnReach')}</button>
+      </div>
+      <p class="hint">${t(st.mode === 'reach' ? 'minReachHint' : 'minBelowHint', { n: hh.qty ?? e?.min?.v ?? 1 })}</p>
       <div class="lbl">${t('minValue')}</div>
       <div class="pad">${stepper({ value: hh.qty ?? e?.min?.v ?? 1, min: 0, on: 'local-qty' })}</div>
       <div class="lbl">${t('minTag')}</div>
@@ -481,8 +552,9 @@ export function openMin(itemId, placeId) {
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="mn-ok">${icon('check')} ${t('save')}</button>`,
     actions: {
       'mn-toggle': () => { st.on = !st.on; h.redraw(); },
+      'mn-mode': (el) => { st.mode = el.dataset.v; h.redraw(); },
       'mn-tag': (el) => { st.tag = el.dataset.id && st.tag !== el.dataset.id ? el.dataset.id : null; h.redraw(); },
-      'mn-ok': () => { store.setMin(itemId, placeId, st.on, h.qty ?? 1, st.tag); closeSheet(); },
+      'mn-ok': () => { store.setMin(itemId, placeId, st.on, h.qty ?? 1, st.tag, st.mode); closeSheet(); },
     },
   });
   h.qty = e?.min?.v ?? 1;

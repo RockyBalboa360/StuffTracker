@@ -119,9 +119,9 @@ export function thumb(it, size = 'md', { photos = true, letters = true } = {}) {
 }
 
 /* ---------- Stepper ---------- */
-export function stepper({ value, min = 0, max = 9999, on = '', args = {}, id = '' }) {
+export function stepper({ value, min = 0, max = 9999, on = '', args = {}, id = '', cls = '' }) {
   const a = Object.entries(args).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ');
-  return `<div class="stepper" data-on="${on}" data-min="${min}" data-max="${max}" ${a}>
+  return `<div class="stepper ${cls}" data-on="${on}" data-min="${min}" data-max="${max}" ${a}>
     <button class="step-btn" type="button" data-d="-1" aria-label="${t('less')}">${icon('minus', 22)}</button>
     <input type="number" inputmode="numeric" pattern="[0-9]*" min="${min}" max="${max}" value="${value}" ${id ? `id="${id}"` : ''} aria-label="${t('qty')}">
     <button class="step-btn" type="button" data-d="1" aria-label="${t('more')}">${icon('plus', 22)}</button>
@@ -279,10 +279,10 @@ function dialog(build) {
     wrap.querySelector('input')?.select();
   });
 }
-export async function confirmDialog({ title, text = '', ok, danger = false }) {
+export async function confirmDialog({ title, text = '', ok, cancel, danger = false }) {
   const r = await dialog({
     html: `<h3>${esc(title)}</h3>${text ? `<p>${esc(text)}</p>` : ''}
-      <div class="dlg-btns"><button class="btn btn--ghost" data-no type="button">${t('cancel')}</button>
+      <div class="dlg-btns"><button class="btn btn--ghost" data-no type="button">${esc(cancel || t('cancel'))}</button>
       <button class="btn ${danger ? 'btn--danger' : 'btn--primary'}" data-yes type="button">${esc(ok || t('ok'))}</button></div>`,
   });
   return r === true;

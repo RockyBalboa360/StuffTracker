@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.11.0';
+export const VERSION = '0.12.0';
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 16 };
 
 let data = null;
@@ -173,11 +173,14 @@ export function inTransit(itemId) {
 export const minTagId = (e) => (e?.min?.tag && data.tags.some((g) => g.id === e.min.tag) ? e.min.tag : null);
 /** Stückzahl, die gegen den Mindestbestand zählt: nur Stücke mit dem Tag, sonst der Gesamtbestand am Ort. */
 export const minCount = (e) => { const g = minTagId(e); return g ? (e.tags[g] || 0) : e.qty; };
+/** Warnmodus: 'below' = Warnung beim Unterschreiten (weniger als n), 'reach' = schon beim Erreichen (n oder weniger). */
+export const minMode = (e) => (e?.min?.mode === 'reach' ? 'reach' : 'below');
 export function minLabel(e) {
   const g = minTagId(e);
-  return g ? t('minShortTag', { n: e.min.v, tag: nm(tag(g)) }) : t('minShort', { n: e.min.v });
+  const k = minMode(e) === 'reach' ? 'minReach' : 'minShort';
+  return g ? t(k + 'Tag', { n: e.min.v, tag: nm(tag(g)) }) : t(k, { n: e.min.v });
 }
-const lowEntry = (e) => !!(e && e.min?.on && minCount(e) < e.min.v);
+const lowEntry = (e) => !!(e && e.min?.on && (minMode(e) === 'reach' ? minCount(e) <= e.min.v : minCount(e) < e.min.v));
 
 export function lowStock(pid) {
   const out = [];
@@ -292,6 +295,25 @@ export function addItem({ name, groupId, placeId, qty, photoData, tags }) {
     return it;
   });
 }
+/** Bezeichnungen gelten als gleich, wenn sie sich nur in Groß-/Kleinschreibung oder Leerzeichen unterscheiden. */
+export const nameKey = (s) => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+/** Artikel mit dieser Bezeichnung (ohne den Artikel exceptId), sonst undefined. */
+export const findByName = (name, exceptId = null) => {
+  const k = nameKey(name);
+  return k ? data.items.find((i) => i.id !== exceptId && nameKey(nm(i)) === k) : undefined;
+};
+/** Bekannte Bezeichnungen, die zu den getippten Buchstaben passen (Wortanfang), kürzeste zuerst. */
+export function suggestNames(q, limit = 5) {
+  const k = nameKey(q);
+  if (!k) return [];
+  const seen = new Set();
+  return data.items.map((i) => nm(i)).filter((n) => {
+    const nk = nameKey(n);
+    if (nk === k || seen.has(nk)) return false;
+    if (!(nk.startsWith(k) || nk.split(' ').some((w) => w.startsWith(k)))) return false;
+    seen.add(nk); return true;
+  }).sort((a, b) => a.length - b.length).slice(0, limit);
+}
 export function updateItem(id, patch) {
   mutate(() => { const it = item(id); if (!it) return; if ('name' in patch) delete it.key; Object.assign(it, patch); });
 }
@@ -362,6 +384,13 @@ export function bookStock(itemId, pid, { tags = {}, plain = 0, out = false }) {
     addLog(out ? 'stockOut' : 'stockIn', { item: nm(it), place: place(pid)?.name, qty: n });
   });
   return { qty: n, tags: tg };
+}
+/** Neuen Bestand in einen vorhandenen Artikel einbuchen (Zusammenführen); ein fehlendes Foto wird übernommen. */
+export function mergeStock(itemId, pid, { qty = 0, tags = {}, photoData = null }) {
+  if (photoData && !photos.has(itemId)) setPhoto(itemId, photoData);
+  if (!(qty > 0)) return { qty: 0, tags: {} };
+  const tg = Object.fromEntries(Object.entries(tags).filter(([, n]) => n > 0));
+  return bookStock(itemId, pid, { tags: tg, plain: Math.max(0, qty - sum(tg)) });
 }
 /** Verknüpfte Tags (logische Zusammenhänge, z. B. sauber <-> schmutzig). */
 export const tagLinks = () => data.tagLinks || [];
@@ -455,8 +484,8 @@ export function transitInfo(itemId) {
   });
 }
 export const retiredFor = (itemId) => data.retired.filter((r) => r.itemId === itemId);
-export function setMin(itemId, pid, on, v, tagId = null) {
-  mutate(() => { const e = ensureEntry(item(itemId), pid); e.min = { on, v: Math.max(0, Math.floor(v) || 0), tag: tagId || null }; });
+export function setMin(itemId, pid, on, v, tagId = null, mode = 'below') {
+  mutate(() => { const e = ensureEntry(item(itemId), pid); e.min = { on, v: Math.max(0, Math.floor(v) || 0), tag: tagId || null, mode: mode === 'reach' ? 'reach' : 'below' }; });
 }
 
 /* ---------- Orte ---------- */

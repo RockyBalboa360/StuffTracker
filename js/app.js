@@ -50,6 +50,44 @@ function schedule() {
   });
 }
 window.addEventListener('st:render', () => render(false));
+
+/* ---------- Wischen: Ort wechseln (Start und Bestand) ---------- */
+/** Reihenfolge wie bei den Ort-Buttons; im Bestand steht „Alle“ vorn. */
+function swipePlaces() {
+  const ids = store.places().map((p) => p.id);
+  if (ui.tab === 'home') return { ids, cur: store.place(ui.homePlace) ? ui.homePlace : store.currentPlaceId() };
+  const p = ui.place || store.currentPlaceId();
+  return { ids: ['all', ...ids], cur: p === 'all' || store.place(p) ? p : store.currentPlaceId() };
+}
+function swipePlace(dir) {
+  const { ids, cur } = swipePlaces();
+  const to = ids[ids.indexOf(cur) + dir];
+  if (to === undefined) { navigator.vibrate?.(8); return; }
+  if (ui.tab === 'home') ui.homePlace = to === store.currentPlaceId() ? null : to;
+  else { ui.place = to; ui.search = ''; }
+  render(false);
+  main.classList.remove('slide-l', 'slide-r');
+  void main.offsetWidth;
+  main.classList.add(dir > 0 ? 'slide-l' : 'slide-r');
+  main.querySelector('.net.on, .pchip.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+}
+(() => {
+  let s = null;
+  document.addEventListener('touchstart', (e) => {
+    s = null;
+    if ((ui.tab !== 'home' && ui.tab !== 'stock') || document.body.classList.contains('has-sheet') || e.touches.length !== 1) return;
+    if (e.target.closest('.netbar, .pchips, input, textarea, select, .stepper')) return;
+    s = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (!s) return;
+    const c = e.changedTouches[0];
+    const dx = c.clientX - s.x; const dy = c.clientY - s.y;
+    const fast = Date.now() - s.t < 800;
+    s = null;
+    if (fast && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) swipePlace(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
 window.addEventListener('hashchange', () => { ui.tab = tabFromHash(); render(false); });
 
 /* ---------- Sprache & Theme ---------- */
@@ -67,7 +105,7 @@ function applyTheme() {
     dark = !isDaytime(new Date(), p?.lat ?? g?.lat, p?.lon ?? g?.lon);
   }
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#000000' : '#0b0b0c');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#000000' : '#ffffff');
 }
 mq.addEventListener?.('change', applyTheme);
 setInterval(applyTheme, 60000);
