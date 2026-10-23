@@ -124,7 +124,7 @@ button.tag { cursor: pointer; }
 .pq .pq-n { font-style: normal; font-weight: 800; font-size: 26px; line-height: 1; letter-spacing: -.02em; margin-right: 2px; }
 .pq--transit em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--muted); }
 .tbadge { width: 36px; height: 36px; border-radius: 50%; background: var(--sign); color: var(--sign-fg); display: inline-grid; place-items: center; border: 2px solid var(--border); flex: none; }
-.tdot { --tt: #fff; --d: 1; --dia: calc(1.5em + (var(--d) - 1) * .62em); width: var(--dia); height: var(--dia); border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; font-weight: 800; line-height: 1; color: var(--tt); background: var(--tc); border: 1.5px solid transparent; flex: none; font-variant-numeric: tabular-nums; }
+.tdot { --tt: #fff; --d: 1; --dia: 22px; width: var(--dia); height: var(--dia); border-radius: 50%; display: inline-grid; place-items: center; font-size: calc(12px * (1.14 - var(--d) * .14)); font-weight: 800; line-height: 1; color: var(--tt); background: var(--tc); border: 1.5px solid transparent; flex: none; font-variant-numeric: tabular-nums; }
 .tdot--none { color: var(--text); background: transparent; border: 1.5px solid var(--text); }
 .tdot--clean { color: #111; background: #fff; box-shadow: none; }
 .tdot--dirty { color: #f8edd2; background-color: #8b6b2d; background-image: radial-gradient(circle at 30% 30%, rgba(48,29,6,.6) 0 2.5px, transparent 3px), radial-gradient(circle at 70% 72%, rgba(48,29,6,.5) 0 2px, transparent 2.5px); border-color: #59421a; }

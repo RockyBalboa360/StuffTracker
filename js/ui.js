@@ -96,7 +96,7 @@ export function tagChip(tg, { on = true, act = '', attrs = '', small = false, co
   const tag = act ? 'button' : 'span';
   return `<${tag} class="${cls}" style="--tc:${color};--tt:${dark ? '#111' : '#fff'}" ${act ? `data-act="${act}" type="button"` : ''} ${attrs}><i></i>${esc(store.nm(tg))}${count != null ? `<em>${count}</em>` : ''}</${tag}>`;
 }
-/** Kleiner Kreis in der Tag-Farbe, nur mit der Stückzahl. Der Durchmesser wächst mit der Stellenzahl (--d). */
+/** Kleiner Kreis in der Tag-Farbe, nur mit der Stückzahl. Der Durchmesser ist für alle Tags gleich, nur die Schrift schrumpft mit der Stellenzahl (--d). */
 export function tagDot(tg, n) {
   const color = tg.color || MTA.grey;
   const dark = tg.style === 'plain' && color.toLowerCase() === MTA.yellow.toLowerCase();
