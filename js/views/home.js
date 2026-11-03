@@ -170,17 +170,24 @@ function backupNotice() {
 }
 actions['backup-now'] = () => actions['exp-json']?.();
 
+/** Tags an diesem Ort, je Tag-Kategorie ein Block (Stücke ohne Tag zählen nur bei Artikeln, die die Kategorie nutzen). */
 function tagOverview(pid, here) {
-  const tot = {}; let none = 0;
+  const tot = {}; const none = {};
   for (const it of here) {
     const e = it.stock[pid];
     for (const [k, n] of Object.entries(e.tags)) tot[k] = (tot[k] || 0) + n;
-    none += store.untagged(e);
+    for (const c of store.itemCats(it)) none[c.id] = (none[c.id] || 0) + store.untagged(e, c.id);
   }
-  const chips = store.tagCounts(tot).map(([g, n]) => tagChip(g, { count: n, act: 'home-tag', attrs: `data-p="${pid}" data-q="${esc(store.nm(g))}"` })).join('');
-  if (!chips && !none) return '';
-  return `<section class="card card--flat"><h3>${t('tagOverview')}</h3>
-    <div class="tagrow">${chips}${none ? `<span class="pill-none"><i></i>${t('noTag')}<em>${none}</em></span>` : ''}</div></section>`;
+  const blocks = store.tagCats().map((c) => {
+    const chips = store.tagCounts(tot).filter(([g]) => g.cat === c.id)
+      .map(([g, n]) => tagChip(g, { count: n, act: 'home-tag', attrs: `data-p="${pid}" data-q="${esc(store.nm(g))}"` })).join('');
+    if (!chips) return '';
+    const n = none[c.id] || 0;
+    return `<div class="catblock"><div class="catname">${esc(store.nm(c))}</div>
+      <div class="tagrow">${chips}${n ? `<span class="pill-none"><i></i>${t('noTag')}<em>${n}</em></span>` : ''}</div></div>`;
+  }).join('');
+  if (!blocks) return '';
+  return `<section class="card card--flat"><h3>${t('tagOverview')}</h3><div class="tagbox tagbox--cats">${blocks}</div></section>`;
 }
 actions['home-tag'] = (el) => openStock(el.dataset.p, el.dataset.q);
 actions['qa-item'] = (el) => openItemForm(null, el.dataset.p);
@@ -241,7 +248,7 @@ export function renderHome() {
         <button class="btn" type="button" data-act="qa-box" data-p="${pid}">${icon('box')} ${t('boxNewShort')}</button>
       </div>
       ${lows.length ? `<h2 class="h2 h2--warn">${icon('alert', 18)} ${t('lowStock')}</h2>
-        <div class="list">${lows.map(({ item, entry }) => `<button class="row row--low" type="button" data-act="item-open" data-item="${item.id}">
+        <div class="list">${lows.map(({ item, entry }) => `<button class="row row--low" type="button" data-act="item-open" data-item="${item.id}" data-place="${pid}">
           <span class="row-main"><b>${esc(store.nm(item))}</b><span class="muted">${store.minLabel(entry)}</span></span>
           <span class="row-qty low">${icon('alert', 16)}<b>${store.minCount(entry)}</b></span></button>`).join('')}</div>` : ''}
       ${section(t('incoming'), incomingAll)}

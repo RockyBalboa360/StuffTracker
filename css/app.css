@@ -486,3 +486,33 @@ select.field { appearance: none; -webkit-appearance: none; background-image: lin
 :root[data-theme=light] .stepper, :root[data-theme=light] .row, :root[data-theme=light] .card { border-color: #bdbaad; }
 :root[data-theme=light] .pcard { border-color: #bdbaad; }
 :root[data-theme=light] .tdot--none { border-color: var(--text); }
+/* ---------- Tag-Kategorien, weitere Orte, Foto-Ansicht ---------- */
+.tagbox--cats { gap: 16px; }
+.catblock { display: flex; flex-direction: column; gap: 8px; }
+.catname { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.catname--btn { background: none; border: 0; padding: 0; text-align: left; display: inline-flex; gap: 6px; align-items: center; cursor: pointer; align-self: flex-start; }
+.catname--mv { margin: 12px 2px 0; }
+.dotgrp { display: inline-flex; align-items: center; gap: 5px; }
+.dotgrp + .dotgrp { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--border); }
+.tag--plain { border-color: rgba(127,127,127,.35); }
+.tdot--plain { border-color: rgba(127,127,127,.45); }
+.others { border-top: 1px dashed var(--border); margin-top: 6px; }
+.others-h { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; padding: 12px 2px; font-weight: 800; font-size: 14px; color: var(--text); text-align: left; cursor: pointer; }
+.others-h .acc-sum { flex: 1; }
+.others-h .ic:last-child { transition: transform .2s; color: var(--muted); }
+.others-h.open .ic:last-child { transform: rotate(180deg); }
+.osum { display: flex; align-items: center; gap: 10px; width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; padding: 8px 12px; margin: 8px 0 0; text-align: left; }
+.osum b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.osum-dots { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 46%; }
+.osum-qty { font-style: normal; font-weight: 800; font-size: 22px; min-width: 28px; text-align: right; }
+.osum .ic:last-child { transition: transform .2s; color: var(--muted); }
+.osum.open .ic:last-child { transform: rotate(180deg); }
+.osum.open { border-color: var(--text); }
+.photo-wrap { position: relative; flex: none; }
+.photo-cam { padding: 0; cursor: pointer; }
+.thumb--zoom { cursor: zoom-in; }
+.sheet--photo .sheet-body { padding: 8px; display: grid; place-items: center; background: #000; border-radius: 0 0 0 0; }
+.photo-big { border: 0; background: none; padding: 0; width: 100%; cursor: zoom-out; }
+.photo-big img { width: 100%; max-height: 72dvh; object-fit: contain; display: block; border-radius: 8px; }
+/* Lupe/Walze in der Bestandsliste: die Zeile in der Bildschirmmitte ist am größten (siehe stock.js) */
+.lens .row { will-change: transform; transform-origin: center center; }

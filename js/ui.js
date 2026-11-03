@@ -88,10 +88,16 @@ export function badgeRaw(ch, color, shape, size = 'lg') {
 }
 
 /* ---------- Tags (Etiketten) ---------- */
+/** Helle Tag-Farben (Weiß, Gelb, Hellgrün …) bekommen dunkle Schrift. */
+const isLight = (hex) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return false;
+  const n = parseInt(m[1], 16); const r = (n >> 16) & 255; const g = (n >> 8) & 255; const b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 165;
+};
 export function tagChip(tg, { on = true, act = '', attrs = '', small = false, count = null } = {}) {
   const style = tg.style === 'plain' ? 'plain' : tg.style;
   const color = tg.color || MTA.grey;
-  const dark = tg.style === 'plain' && color.toLowerCase() === MTA.yellow.toLowerCase();
+  const dark = tg.style === 'plain' && isLight(color);
   const cls = `tag tag--${style} ${on ? 'on' : 'off'} ${small ? 'tag--sm' : ''}`;
   const tag = act ? 'button' : 'span';
   return `<${tag} class="${cls}" style="--tc:${color};--tt:${dark ? '#111' : '#fff'}" ${act ? `data-act="${act}" type="button"` : ''} ${attrs}><i></i>${esc(store.nm(tg))}${count != null ? `<em>${count}</em>` : ''}</${tag}>`;
@@ -99,7 +105,7 @@ export function tagChip(tg, { on = true, act = '', attrs = '', small = false, co
 /** Kleiner Kreis in der Tag-Farbe, nur mit der Stückzahl. Der Durchmesser ist für alle Tags gleich, nur die Schrift schrumpft mit der Stellenzahl (--d). */
 export function tagDot(tg, n) {
   const color = tg.color || MTA.grey;
-  const dark = tg.style === 'plain' && color.toLowerCase() === MTA.yellow.toLowerCase();
+  const dark = tg.style === 'plain' && isLight(color);
   return `<span class="tdot tdot--${tg.style}" style="--tc:${color};--tt:${dark ? '#111' : '#fff'};--d:${String(n).length}" title="${esc(store.nm(tg))}" aria-label="${esc(store.nm(tg))}: ${n}">${n}</span>`;
 }
 /** Stücke ohne Tag: transparenter Kreis mit dünnem hellem Rand. */
@@ -107,13 +113,30 @@ export const untaggedDot = (n) => `<span class="tdot tdot--none" style="--d:${St
 export function tagCountChips(tags, small = true) {
   return store.tagCounts(tags).map(([g, n]) => tagChip(g, { small, count: n })).join('');
 }
+/**
+ * Tag-Kreise eines Bestandseintrags, nach Tag-Kategorie gruppiert: je Kategorie ein Block mit den Tag-Kreisen und,
+ * wenn nicht alle Stücke ein Tag dieser Kategorie tragen, davor dem transparenten Kreis für die Stücke ohne Tag.
+ */
+export function tagDots(tags, total) {
+  const groups = new Map();
+  for (const [g, n] of store.tagCounts(tags)) {
+    const c = g.cat || '_';
+    if (!groups.has(c)) groups.set(c, []);
+    groups.get(c).push([g, n]);
+  }
+  return [...groups.values()].map((list) => {
+    const free = total - list.reduce((a, [, n]) => a + n, 0);
+    return `<span class="dotgrp">${free > 0 ? untaggedDot(free) : ''}${list.map(([g, n]) => tagDot(g, n)).join('')}</span>`;
+  }).join('');
+}
 
 /* ---------- Thumbnail ---------- */
-export function thumb(it, size = 'md', { photos = true, letters = true } = {}) {
+export function thumb(it, size = 'md', { photos = true, letters = true, zoom = false } = {}) {
   const src = photos ? store.photo(it.id) : null;
   const g = store.group(it.groupId);
   const ini = esc((store.nm(it) || '?').trim().charAt(0).toUpperCase());
-  if (src) return `<span class="thumb sz-${size}"><img src="${src}" alt=""></span>`;
+  // zoom: Antippen des Fotos öffnet die große Ansicht (data-act schlägt die Aktion der umgebenden Zeile)
+  if (src) return `<span class="thumb sz-${size}${zoom ? ' thumb--zoom' : ''}" ${zoom ? `data-act="photo-zoom" data-item="${it.id}"` : ''}><img src="${src}" alt=""></span>`;
   if (!letters) return '';
   return `<span class="thumb thumb--empty sz-${size}" title="${esc(store.nm(g))}"><b>${ini}</b></span>`;
 }

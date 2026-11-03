@@ -1,8 +1,38 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.12.1';
-export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 16 };
+export const VERSION = '0.13.0';
+// tagsPerEntry gilt je Tag-Kategorie (höchstens so viele verschiedene Tags einer Kategorie je Artikel und Ort)
+export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 80, tagCats: 12 };
+
+/* ---------- Standard-Kategorien und -Tags ---------- */
+const DEFAULT_CATS = ['clean', 'color', 'tech', 'charge'];
+/** Tag-Kategorien je Standardgruppe: was für diese Art Artikel sinnvoll ist (im Artikel jederzeit änderbar). */
+const GROUP_CATS = {
+  g_base: ['cat_clean', 'cat_color'], g_second: ['cat_clean', 'cat_color'], g_third: ['cat_clean', 'cat_color'],
+  g_sport: ['cat_clean', 'cat_color'], g_acc: ['cat_clean', 'cat_color'], g_bags: ['cat_clean', 'cat_color'],
+  g_outdoor: ['cat_clean', 'cat_color'], g_it: ['cat_tech', 'cat_charge'], g_supp: [],
+};
+const groupDefaultCats = (g) => GROUP_CATS[g?.id] || g?.cats || ['cat_clean'];
+/** [id, Schlüssel, Kategorie, Farbe] – Reihenfolge = Anzeigereihenfolge innerhalb der Kategorie. */
+const DEFAULT_TAGS = [
+  ['tg_clean', 'clean', 'cat_clean', null], ['tg_dirty', 'dirty', 'cat_clean', null],
+  ['tg_filthy', 'filthy', 'cat_clean', '#7A4B25'], ['tg_worn', 'worn', 'cat_clean', '#B08A4A'],
+  ['tg_damaged', 'damaged', 'cat_clean', null], ['tg_lost', 'lost', 'cat_clean', null],
+  ['tg_c_black', 'c_black', 'cat_color', '#111111'], ['tg_c_grey', 'c_grey', 'cat_color', '#8E9196'],
+  ['tg_c_blue', 'c_blue', 'cat_color', '#2457D6'], ['tg_c_green', 'c_green', 'cat_color', '#2E8B57'],
+  ['tg_c_olive', 'c_olive', 'cat_color', '#6B6B2A'], ['tg_c_white', 'c_white', 'cat_color', '#FFFFFF'],
+  ['tg_c_midgreen', 'c_midgreen', 'cat_color', '#004953'], ['tg_c_darkgrey', 'c_darkgrey', 'cat_color', '#4B4F54'],
+  ['tg_c_navy', 'c_navy', 'cat_color', '#1B2A6B'], ['tg_c_jeans', 'c_jeans', 'cat_color', '#2F3E57'],
+  ['tg_c_slate', 'c_slate', 'cat_color', '#2F4F4F'],
+  ['tg_t_able', 't_able', 'cat_tech', '#6CBE45'], ['tg_t_partable', 't_partable', 'cat_tech', '#E0B400'], ['tg_t_unable', 't_unable', 'cat_tech', '#B3111D'],
+  ['tg_t_ready', 't_ready', 'cat_tech', '#00933C'], ['tg_t_partready', 't_partready', 'cat_tech', '#FF8A00'], ['tg_t_unready', 't_unready', 'cat_tech', '#EE352E'],
+  ['tg_ch_full', 'ch_full', 'cat_charge', '#00933C'], ['tg_ch_empty', 'ch_empty', 'cat_charge', '#B3111D'],
+  ['tg_ch_gt50', 'ch_gt50', 'cat_charge', '#6CBE45'], ['tg_ch_lt50', 'ch_lt50', 'cat_charge', '#FF8A00'], ['tg_ch_unknown', 'ch_unknown', 'cat_charge', '#8E9196'],
+];
+const STYLE_OF = { tg_clean: 'clean', tg_dirty: 'dirty', tg_lost: 'lost', tg_damaged: 'damaged' };
+const mkDefaultTag = ([id, k, cat, color]) => (STYLE_OF[id] ? { id, key: 'tag.' + k, style: STYLE_OF[id], cat } : { id, key: 'tag.' + k, style: 'plain', color, cat });
+const mkDefaultCat = (k) => ({ id: 'cat_' + k, key: 'cat.' + k });
 
 let data = null;
 let migratedFrom = null;
@@ -90,6 +120,28 @@ function migrate(d) {
   if (d.v < 6) {
     // v6: nur eine Versionsmarke – löst die Meldung „Update abgeschlossen“ beim Wechsel von 0.6.x aus
     d.v = 6;
+  }
+  if (d.v < 7) {
+    // v7: Tag-Kategorien (Sauberkeit, Farben, technischer Zustand, Ladezustand); je Artikel wählbar
+    d.tagCats ||= DEFAULT_CATS.map(mkDefaultCat);
+    const std = new Set(['tg_clean', 'tg_dirty', 'tg_lost', 'tg_damaged']);
+    if (d.tags.some((g) => !std.has(g.id) && !g.cat)) d.tagCats.push({ id: 'cat_other', key: 'cat.other' });
+    d.tags.forEach((g) => { g.cat ||= std.has(g.id) ? 'cat_clean' : 'cat_other'; });
+    // fehlende Standard-Tags ergänzen und die Tags nach Kategorie ordnen (eigene Tags am Ende ihrer Kategorie)
+    DEFAULT_TAGS.forEach((row) => { if (!d.tags.some((g) => g.id === row[0])) d.tags.push(mkDefaultTag(row)); });
+    const defOrder = DEFAULT_TAGS.map((r) => r[0]);
+    const catOrder = d.tagCats.map((c) => c.id);
+    d.tags.sort((a, b) => (catOrder.indexOf(a.cat) - catOrder.indexOf(b.cat))
+      || ((defOrder.includes(a.id) ? defOrder.indexOf(a.id) : 999) - (defOrder.includes(b.id) ? defOrder.indexOf(b.id) : 999)));
+    d.groups.forEach((g) => { g.cats ||= groupDefaultCats(g); });
+    d.items.forEach((it) => {
+      if (it.cats) return;
+      const used = new Set();
+      Object.values(it.stock).forEach((e) => Object.keys(e.tags || {}).forEach((k) => { const c = d.tags.find((x) => x.id === k)?.cat; if (c) used.add(c); }));
+      it.cats = d.tagCats.map((c) => c.id).filter((id) => id === 'cat_clean' || used.has(id));
+    });
+    d.items.forEach((it) => Object.values(it.stock).forEach((e) => normalize(e)));
+    d.v = 7;
   }
   d.settings.homeButtons ||= 'dashboard';
   return d;
@@ -223,10 +275,14 @@ function addLog(type, o = {}) {
   data.log.unshift({ id: uid(), ts: Date.now(), type, ...o });
   if (data.log.length > 500) data.log.length = 500;
 }
-/** Tags tragen je Artikel+Ort eine Stückzahl: tags = { tagId: anzahl }. Die Gesamtmenge ist der Master: Summe der Tag-Mengen <= qty. */
+/**
+ * Tags tragen je Artikel+Ort eine Stückzahl: tags = { tagId: anzahl }. Die Gesamtmenge ist der Master:
+ * Innerhalb einer Tag-Kategorie ist die Summe der Tag-Mengen höchstens qty (ein Stück trägt je Kategorie höchstens ein Tag).
+ */
 function normalize(e) {
   if (e.qty <= 0) { e.qty = 0; e.tags = {}; return; }
   for (const k of Object.keys(e.tags)) {
+    if (!tag(k)) { delete e.tags[k]; continue; }
     if (e.tags[k] > e.qty) e.tags[k] = e.qty;
     if (!(e.tags[k] > 0)) delete e.tags[k];
   }
@@ -235,28 +291,90 @@ function normalize(e) {
 function ensureEntry(it, pid) {
   return (it.stock[pid] ||= { qty: 0, tags: {}, min: { on: false, v: 1, tag: null } });
 }
+const sum = (o) => Object.values(o || {}).reduce((a, b) => a + b, 0);
+/** Kategorie eines Tags (Tags aus alten Datenständen ohne Kategorie bilden eine gemeinsame Gruppe '_'). */
+const catKey = (tagId) => tag(tagId)?.cat || '_';
+/** Summe der Tag-Mengen einer Kategorie (ohne cat: aller Tags). */
+export function catSum(tags, cat) {
+  let n = 0;
+  for (const [k, v] of Object.entries(tags || {})) if (cat === undefined || catKey(k) === cat) n += v;
+  return n;
+}
+const kindsInCat = (tags, cat) => Object.keys(tags).filter((k) => tags[k] > 0 && catKey(k) === cat).length;
 function addTagCounts(e, incoming) {
   for (const [k, n] of Object.entries(incoming || {})) {
-    if (!(n > 0)) continue;
-    if (!(k in e.tags) && Object.keys(e.tags).length >= LIMITS.tagsPerEntry) continue;
+    if (!(n > 0) || !tag(k)) continue;
+    if (!(k in e.tags) && kindsInCat(e.tags, catKey(k)) >= LIMITS.tagsPerEntry) continue;
     e.tags[k] = (e.tags[k] || 0) + n;
   }
 }
-const sum = (o) => Object.values(o || {}).reduce((a, b) => a + b, 0);
+/** Je Kategorie die Summe auf qty begrenzen: überzählige Stücke werden vom zuletzt gesetzten Tag der Kategorie abgezogen. */
 function trimTags(tags, qty) {
-  let s = sum(tags);
-  for (const k of Object.keys(tags).reverse()) {
-    if (s <= qty) break;
-    const cut = Math.min(tags[k], s - qty);
-    tags[k] -= cut; s -= cut;
-    if (tags[k] <= 0) delete tags[k];
+  const cats = new Set(Object.keys(tags).map(catKey));
+  for (const c of cats) {
+    let s = catSum(tags, c);
+    for (const k of Object.keys(tags).reverse()) {
+      if (s <= qty) break;
+      if (catKey(k) !== c) continue;
+      const cut = Math.min(tags[k], s - qty);
+      tags[k] -= cut; s -= cut;
+      if (tags[k] <= 0) delete tags[k];
+    }
   }
 }
 /** [[tag, anzahl], …] in der Reihenfolge der Tag-Liste. */
 export function tagCounts(tags) {
   return data.tags.filter((g) => tags?.[g.id] > 0).map((g) => [g, tags[g.id]]);
 }
-export const untagged = (e) => Math.max(0, e.qty - sum(e.tags));
+/** Stücke ohne Tag in einer Kategorie (ohne cat: die größte Lücke über alle Tags, wie vor den Kategorien). */
+export const untagged = (e, cat) => Math.max(0, e.qty - catSum(e.tags, cat));
+
+/* ---------- Tag-Kategorien ---------- */
+export const tagCats = () => data.tagCats;
+export const tagCat = (id) => data.tagCats.find((c) => c.id === id);
+export const tagsOfCat = (cat) => data.tags.filter((g) => g.cat === cat);
+/** Kategorien, die ein Artikel verwendet (in der Reihenfolge der Kategorien). */
+export const itemCats = (it) => data.tagCats.filter((c) => it?.cats?.includes(c.id));
+/** Vorgabe-Kategorien für neue Artikel einer Gruppe. */
+export const defaultCatsFor = (groupId) => groupDefaultCats(group(groupId));
+/** Anzahl Stücke mit Tags aus dieser Kategorie über alle Orte (für die Rückfrage beim Entfernen). */
+export function catUsage(itemId, cat) {
+  const it = item(itemId);
+  return Object.values(it?.stock || {}).reduce((a, e) => a + catSum(e.tags, cat), 0);
+}
+export function setItemCats(itemId, cats) {
+  mutate(() => {
+    const it = item(itemId); if (!it) return;
+    const keep = data.tagCats.map((c) => c.id).filter((id) => cats.includes(id));
+    const removed = (it.cats || []).filter((c) => !keep.includes(c));
+    it.cats = keep;
+    if (!removed.length) return;
+    const rm = new Set(data.tags.filter((g) => removed.includes(g.cat)).map((g) => g.id));
+    Object.values(it.stock).forEach((e) => {
+      for (const k of Object.keys(e.tags)) if (rm.has(k)) delete e.tags[k];
+      if (e.min?.tag && rm.has(e.min.tag)) e.min.tag = null;
+    });
+    data.transports.forEach((tr) => tr.lines.forEach((l) => {
+      if (l.itemId === itemId) for (const k of Object.keys(l.tags || {})) if (rm.has(k)) delete l.tags[k];
+    }));
+  });
+}
+export function addTagCat(name) {
+  if (data.tagCats.length >= LIMITS.tagCats) return null;
+  return mutate(() => { const c = { id: uid(), name }; data.tagCats.push(c); return c; });
+}
+export function renameTagCat(id, name) { mutate(() => { const c = tagCat(id); delete c.key; c.name = name; }); }
+/** Löscht die Kategorie samt ihrer Tags (überall entfernt). */
+export function deleteTagCat(id) {
+  mutate(() => {
+    const ids = data.tags.filter((g) => g.cat === id).map((g) => g.id);
+    ids.forEach((tid) => removeTagEverywhere(tid));
+    data.tags = data.tags.filter((g) => g.cat !== id);
+    data.tagCats = data.tagCats.filter((c) => c.id !== id);
+    data.items.forEach((it) => { it.cats = (it.cats || []).filter((c) => c !== id); });
+    data.groups.forEach((g) => { if (g.cats) g.cats = g.cats.filter((c) => c !== id); });
+  });
+}
 
 /** Stück je Tag, die nicht schon in Kisten (Vorbereitung) vorgemerkt sind. */
 export function freeTags(it, pid) {
@@ -270,23 +388,35 @@ export function freeTags(it, pid) {
   return out;
 }
 export function defaultAlloc(it, pid, qty) {
-  const free = freeTags(it, pid); const out = {}; let left = qty;
+  const free = freeTags(it, pid); const out = {}; const used = {};
   for (const g of data.tags) {
-    const f = free[g.id];
-    if (f && left > 0) { const n = Math.min(f, left); out[g.id] = n; left -= n; }
+    const f = free[g.id]; const c = catKey(g.id);
+    const left = qty - (used[c] || 0);
+    if (f && left > 0) { const n = Math.min(f, left); out[g.id] = n; used[c] = (used[c] || 0) + n; }
   }
   return out;
 }
+/** Passt eine Zuordnung {tagId: anzahl} zu einer Menge? (je Kategorie höchstens qty Stück, nur bekannte Tags) */
+export function allocFits(alloc, qty) {
+  const cats = new Set(Object.keys(alloc).map(catKey));
+  return [...cats].every((c) => catSum(alloc, c) <= qty);
+}
 
 /* ---------- Artikel ---------- */
-export function addItem({ name, groupId, placeId, qty, photoData, tags }) {
+export function addItem({ name, groupId, placeId, qty, photoData, tags, cats }) {
   return mutate(() => {
-    const it = { id: uid(), name, groupId, stock: {}, createdAt: Date.now() };
+    const it = { id: uid(), name, groupId, stock: {}, createdAt: Date.now(), cats: cats ? data.tagCats.map((c) => c.id).filter((id) => cats.includes(id)) : [...defaultCatsFor(groupId)] };
     if (placeId && qty > 0) {
       const e = ensureEntry(it, placeId);
       e.qty = qty;
-      // Tags mit Stückzahl gleich beim Anlegen (Summe <= Menge, höchstens tagsPerEntry verschiedene)
-      for (const [k, n] of Object.entries(tags || {}).slice(0, LIMITS.tagsPerEntry)) if (n > 0 && tag(k)) e.tags[k] = n;
+      // Tags mit Stückzahl gleich beim Anlegen (nur Kategorien des Artikels, je Kategorie höchstens tagsPerEntry und Summe <= Menge)
+      const per = {};
+      for (const [k, n] of Object.entries(tags || {})) {
+        const g = tag(k);
+        if (!(n > 0) || !g || !it.cats.includes(g.cat)) continue;
+        per[g.cat] = (per[g.cat] || 0) + 1;
+        if (per[g.cat] <= LIMITS.tagsPerEntry) e.tags[k] = n;
+      }
       normalize(e);
     }
     data.items.push(it);
@@ -351,25 +481,26 @@ export function setQty(itemId, pid, qty) {
 }
 /**
  * Zugang oder Abgang größerer Mengen buchen (Neukauf, Verbrauch …): ändert die Gesamtmenge.
- * tags = { tagId: anzahl }, plain = Stücke ohne Tag. Abgang nimmt nur Stücke, die nicht in Kisten vorgemerkt sind.
+ * qty = Stückzahl insgesamt, tags = { tagId: anzahl } (je Kategorie höchstens qty Stück).
+ * Abgang nimmt nur Stücke, die nicht in Kisten vorgemerkt sind.
  * Liefert { qty, tags } (die gebuchte Menge) oder false, wenn die Buchung nicht möglich ist.
  */
-export function bookStock(itemId, pid, { tags = {}, plain = 0, out = false }) {
+export function bookStock(itemId, pid, { qty = 0, tags = {}, out = false }) {
   const it = item(itemId);
   if (!it || !place(pid)) return false;
   const tg = Object.fromEntries(Object.entries(tags).map(([k, n]) => [k, Math.floor(Number(n) || 0)]).filter(([k, n]) => n > 0 && tag(k)));
-  plain = Math.max(0, Math.floor(Number(plain) || 0));
-  const n = sum(tg) + plain;
-  if (n <= 0) return false;
+  const n = Math.max(0, Math.floor(Number(qty) || 0));
+  if (n <= 0 || !allocFits(tg, n)) return false;
   const e = it.stock[pid];
   if (out) {
-    if (!e) return false;
+    if (!e || n > available(it, pid)) return false;
     const free = freeTags(it, pid);
-    const freePlain = available(it, pid) - sum(free);
-    if (plain > freePlain || Object.entries(tg).some(([k, c]) => c > (free[k] || 0))) return false;
+    if (Object.entries(tg).some(([k, c]) => c > (free[k] || 0))) return false;
   } else {
-    const kinds = new Set([...Object.keys(e?.tags || {}), ...Object.keys(tg)]);
-    if (kinds.size > LIMITS.tagsPerEntry) return false;
+    const merged = { ...(e?.tags || {}) };
+    for (const k of Object.keys(tg)) merged[k] = (merged[k] || 0) + tg[k];
+    const cats = new Set(Object.keys(merged).map(catKey));
+    if ([...cats].some((c) => kindsInCat(merged, c) > LIMITS.tagsPerEntry)) return false;
   }
   mutate(() => {
     const en = ensureEntry(it, pid);
@@ -386,16 +517,21 @@ export function bookStock(itemId, pid, { tags = {}, plain = 0, out = false }) {
   return { qty: n, tags: tg };
 }
 /** Neuen Bestand in einen vorhandenen Artikel einbuchen (Zusammenführen); ein fehlendes Foto wird übernommen. */
-export function mergeStock(itemId, pid, { qty = 0, tags = {}, photoData = null }) {
+export function mergeStock(itemId, pid, { qty = 0, tags = {}, photoData = null, cats = null }) {
   if (photoData && !photos.has(itemId)) setPhoto(itemId, photoData);
   if (!(qty > 0)) return { qty: 0, tags: {} };
-  const tg = Object.fromEntries(Object.entries(tags).filter(([, n]) => n > 0));
-  return bookStock(itemId, pid, { tags: tg, plain: Math.max(0, qty - sum(tg)) });
+  // Kategorien des neuen Eintrags kommen zu denen des vorhandenen Artikels dazu
+  const it = item(itemId);
+  if (cats?.length) mutate(() => { it.cats = data.tagCats.map((c) => c.id).filter((id) => it.cats?.includes(id) || cats.includes(id)); });
+  const tg = Object.fromEntries(Object.entries(tags).filter(([k, n]) => n > 0 && it?.cats?.includes(tag(k)?.cat)));
+  return bookStock(itemId, pid, { qty, tags: tg });
 }
 /** Verknüpfte Tags (logische Zusammenhänge, z. B. sauber <-> schmutzig). */
 export const tagLinks = () => data.tagLinks || [];
+/** Verknüpfte Tags gelten nur innerhalb derselben Kategorie. */
 export function partnersOf(tagId) {
-  return tagLinks().flatMap(([a, b]) => (a === tagId ? [b] : b === tagId ? [a] : [])).filter((id) => data.tags.some((g) => g.id === id));
+  return tagLinks().flatMap(([a, b]) => (a === tagId ? [b] : b === tagId ? [a] : []))
+    .filter((id) => data.tags.some((g) => g.id === id) && catKey(id) === catKey(tagId));
 }
 /** Größte mögliche Menge für ein Tag: die Gesamtmenge (fehlende Stücke kommen von anderen Tags). */
 export function tagMax(itemId, pid) {
@@ -414,6 +550,8 @@ export function setTagCount(itemId, pid, tagId, n) {
   n = Math.max(0, Math.min(tagMax(itemId, pid, tagId), Math.floor(Number(n) || 0)));
   const delta = n - cur;
   if (delta === 0) return true;
+  const cat = catKey(tagId);
+  const sameCat = (k) => catKey(k) === cat;
   const partners = partnersOf(tagId);
   const next = { ...e.tags };
   if (delta > 0) {
@@ -422,8 +560,8 @@ export function setTagCount(itemId, pid, tagId, n) {
       const take = Math.min(need, next[p] || 0);
       if (take > 0) { next[p] -= take; need -= take; if (next[p] <= 0) delete next[p]; }
     }
-    need -= Math.min(need, untagged(e));
-    const others = Object.keys(next).filter((k) => k !== tagId).sort((a, b) => next[b] - next[a]);
+    need -= Math.min(need, untagged(e, cat));
+    const others = Object.keys(next).filter((k) => k !== tagId && sameCat(k)).sort((a, b) => next[b] - next[a]);
     for (const k of others) {
       if (need <= 0) break;
       const take = Math.min(need, next[k]);
@@ -432,19 +570,19 @@ export function setTagCount(itemId, pid, tagId, n) {
     }
   } else if (partners.length) {
     const p = partners[0];
-    if (p in next || Object.keys(next).length - (n === 0 ? 1 : 0) < LIMITS.tagsPerEntry) next[p] = (next[p] || 0) - delta;
+    if (p in next || kindsInCat(next, cat) - (n === 0 ? 1 : 0) < LIMITS.tagsPerEntry) next[p] = (next[p] || 0) - delta;
   }
   if (n > 0) next[tagId] = n; else delete next[tagId];
-  if (Object.keys(next).length > LIMITS.tagsPerEntry) return false;
+  if (kindsInCat(next, cat) > LIMITS.tagsPerEntry) return false;
   mutate(() => { e.tags = next; normalize(e); });
   return true;
 }
-/** Startwert beim Hinzufügen eines Tags: 1 Stück von einem verknüpften Tag, sonst alle Stücke ohne Tag (mindestens 1). */
+/** Startwert beim Hinzufügen eines Tags: 1 Stück von einem verknüpften Tag, sonst alle Stücke ohne Tag der Kategorie (mindestens 1). */
 export function defaultTagCount(itemId, pid, tagId) {
   const e = item(itemId)?.stock[pid];
   if (!e) return 1;
   if (partnersOf(tagId).some((p) => e.tags[p] > 0)) return 1;
-  return Math.max(1, untagged(e));
+  return Math.max(1, untagged(e, catKey(tagId)));
 }
 export function addTagLink(a, b) {
   if (a === b || !tag(a) || !tag(b)) return false;
@@ -515,6 +653,10 @@ export function deletePlace(id) {
 
 /* ---------- Gruppen ---------- */
 export function addGroup(name) { return mutate(() => { const g = { id: uid(), name }; data.groups.push(g); return g; }); }
+/** Tag-Kategorien, die neue Artikel dieser Gruppe vorab erhalten. */
+export function setGroupCats(id, cats) {
+  mutate(() => { const g = group(id); if (g) g.cats = data.tagCats.map((c) => c.id).filter((c) => cats.includes(c)); }, false);
+}
 export function renameGroup(id, name) { mutate(() => { const g = group(id); delete g.key; g.name = name; }); }
 export function moveGroup(id, d) {
   mutate(() => {
@@ -531,22 +673,34 @@ export function deleteGroup(id) {
 }
 
 /* ---------- Tags ---------- */
-export function addTag(name, color) {
+/** Neues Tag in einer Kategorie (ohne Angabe: Sauberkeit bzw. die erste Kategorie). */
+export function addTag(name, color, cat) {
   if (data.tags.length >= LIMITS.tagsTotal) return null;
-  return mutate(() => { const g = { id: uid(), name, style: 'plain', color }; data.tags.push(g); return g; });
+  const c = tagCat(cat) ? cat : data.tagCats[0]?.id;
+  // neue Tags stehen am Ende ihrer Kategorie
+  return mutate(() => {
+    const g = { id: uid(), name, style: 'plain', color, cat: c };
+    let at = data.tags.length;
+    for (let i = data.tags.length - 1; i >= 0; i--) if (data.tags[i].cat === c) { at = i + 1; break; }
+    data.tags.splice(at, 0, g);
+    return g;
+  });
 }
 export function updateTag(id, patch) {
   mutate(() => { const g = tag(id); if ('name' in patch) delete g.key; Object.assign(g, patch); });
 }
+function removeTagEverywhere(id) {
+  data.tagLinks = (data.tagLinks || []).filter((l) => !l.includes(id));
+  data.items.forEach((it) => Object.values(it.stock).forEach((e) => {
+    delete e.tags[id];
+    if (e.min?.tag === id) e.min.tag = null;
+  }));
+  data.transports.forEach((tr) => tr.lines.forEach((l) => { if (l.tags) delete l.tags[id]; }));
+}
 export function deleteTag(id) {
   mutate(() => {
     data.tags = data.tags.filter((g) => g.id !== id);
-    data.tagLinks = (data.tagLinks || []).filter((l) => !l.includes(id));
-    data.items.forEach((it) => Object.values(it.stock).forEach((e) => {
-      delete e.tags[id];
-      if (e.min?.tag === id) e.min.tag = null;
-    }));
-    data.transports.forEach((tr) => tr.lines.forEach((l) => { if (l.tags) delete l.tags[id]; }));
+    removeTagEverywhere(id);
   });
 }
 
@@ -596,7 +750,7 @@ export function addLine(tid, itemId, qty, alloc) {
   if (qty > available(it, tr.from)) return false;
   alloc ||= defaultAlloc(it, tr.from, qty);
   const free = freeTags(it, tr.from);
-  if (sum(alloc) > qty || Object.entries(alloc).some(([k, n]) => n > (free[k] || 0))) return false;
+  if (!allocFits(alloc, qty) || Object.entries(alloc).some(([k, n]) => n > (free[k] || 0))) return false;
   const l = tr.lines.find((x) => x.itemId === itemId);
   mutate(() => {
     if (l) {
@@ -701,6 +855,7 @@ export function exportJson() {
 export async function importJson(text) {
   const o = JSON.parse(text);
   if (o.app !== 'StuffTracker' || !o.data?.places) throw new Error('format');
+  data = o.data; // vor dem Migrieren setzen: normalize() liest die Tags aus dem aktuellen Stand
   data = migrate(o.data);
   photos = new Map(Object.entries(o.photos || {}));
   if (db) {
@@ -733,15 +888,11 @@ function seed(lang, empty = false) {
   const names = lang === 'en' ? ['Home', 'Office', 'Commuter flat'] : ['Wohnung', 'Büro', 'Pendlerwohnung'];
   const pl = names.map((name) => ({ id: uid(), name }));
   const groups = ['base', 'second', 'third', 'sport', 'supp', 'acc', 'it', 'bags', 'outdoor']
-    .map((k) => ({ id: 'g_' + k, key: 'group.' + k }));
-  const tg = [
-    { id: 'tg_clean', key: 'tag.clean', style: 'clean' },
-    { id: 'tg_dirty', key: 'tag.dirty', style: 'dirty' },
-    { id: 'tg_lost', key: 'tag.lost', style: 'lost' },
-    { id: 'tg_damaged', key: 'tag.damaged', style: 'damaged' },
-  ];
+    .map((k) => ({ id: 'g_' + k, key: 'group.' + k, cats: GROUP_CATS['g_' + k] }));
+  const tg = DEFAULT_TAGS.map(mkDefaultTag);
   const d = {
-    v: 6,
+    v: 7,
+    tagCats: DEFAULT_CATS.map(mkDefaultCat),
     tagLinks: [['tg_clean', 'tg_dirty']],
     settings: {
       lang: 'auto', theme: 'auto', placeMode: 'auto', manualPlace: null, lastPlace: null, lastGeo: null,
@@ -754,7 +905,8 @@ function seed(lang, empty = false) {
   if (empty) return d;
 
   const mk = (key, g, stock) => {
-    const it = { id: uid(), key, groupId: 'g_' + g, sample: true, createdAt: Date.now(), stock: {} };
+    // Beispiel-Artikel nutzen immer Sauberkeit (die Beispielzahlen verwenden diese Tags), plus die Vorgabe ihrer Gruppe
+    const it = { id: uid(), key, groupId: 'g_' + g, sample: true, createdAt: Date.now(), stock: {}, cats: [...new Set(['cat_clean', ...GROUP_CATS['g_' + g]])].filter((c) => d.tagCats.some((x) => x.id === c)) };
     for (const [pi, [qty, tags = {}, min]] of Object.entries(stock)) {
       it.stock[pl[pi].id] = { qty, tags, min: min ? { on: true, v: min } : { on: false, v: 1 } };
     }

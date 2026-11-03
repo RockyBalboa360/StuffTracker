@@ -49,7 +49,9 @@ export function renderSettings() {
       <div class="lbl">${t('listShow')}</div>
       <button type="button" class="switch ${s.listPhotos !== false ? 'on' : ''}" data-act="list-toggle" data-k="listPhotos" role="switch" aria-checked="${s.listPhotos !== false}"><i></i><span>${t('listPhotos')}</span></button>
       <button type="button" class="switch ${s.listLetters !== false ? 'on' : ''}" data-act="list-toggle" data-k="listLetters" role="switch" aria-checked="${s.listLetters !== false}"><i></i><span>${t('listLetters')}</span></button>
-      <p class="hint">${t('listHint')}</p></section>
+      <p class="hint">${t('listHint')}</p>
+      <button type="button" class="switch ${s.lens !== false ? 'on' : ''}" data-act="list-toggle" data-k="lens" role="switch" aria-checked="${s.lens !== false}"><i></i><span>${t('lensShow')}</span></button>
+      <p class="hint">${t('lensHint')}</p></section>
 
     <section class="card"><h3>${t('wxSettings')}</h3>
       <button type="button" class="switch ${s.weatherOn ? 'on' : ''}" data-act="wx-toggle" role="switch" aria-checked="${s.weatherOn}"><i></i><span>${t('wxShow')}</span></button>
@@ -79,11 +81,13 @@ export function renderSettings() {
         <button type="button" class="icon-btn icon-btn--danger" data-act="grp-del" data-id="${g.id}" aria-label="${t('delete')}">${icon('trash', 20)}</button></div>`).join('')}
       <button type="button" class="btn btn--block" data-act="grp-add">${icon('plus')} ${t('groupAdd')}</button>${accEnd}
 
-    <section class="card"><h3>${t('tags')} <small>${store.tags().length}/${store.LIMITS.tagsTotal}</small></h3>
-      <p class="hint">${t('tagsHint', { n: store.LIMITS.tagsPerEntry })}</p>
-      <div class="tagrow">${store.tags().map((g) => `<span class="tagwrap">${tagChip(g, { act: 'tag-edit', attrs: `data-id="${g.id}"` })}</span>`).join('')}
-      <button class="tag tag--add" type="button" data-act="tag-add" aria-label="${t('tagNew')}">${icon('plus', 16)}</button></div></section>
-
+    ${accStart('tags', t('tags'), `<small>${store.tags().length} · ${store.tagCats().length} ${t('catsTitle')}</small>`)}
+      <p class="hint">${t('catsHintSettings')} ${t('tagsHint', { n: store.LIMITS.tagsPerEntry })}</p>
+      ${store.tagCats().map((c) => `<div class="catblock">
+        <button type="button" class="catname catname--btn" data-act="cat-edit" data-id="${c.id}">${esc(store.nm(c))} ${icon('edit', 14)}</button>
+        <div class="tagrow">${store.tagsOfCat(c.id).map((g) => `<span class="tagwrap">${tagChip(g, { act: 'tag-edit', attrs: `data-id="${g.id}"` })}</span>`).join('')}
+        <button class="tag tag--add" type="button" data-act="tag-add" data-cat="${c.id}" aria-label="${t('tagNew')}">${icon('plus', 16)}</button></div></div>`).join('')}
+      <button type="button" class="btn btn--block" data-act="cat-add">${icon('plus')} ${t('catAdd')}</button>${accEnd}
     ${accStart('links', t('tagLinks'), `<small>${store.tagLinks().length}</small>`)}
       <ol class="rules">
         <li>${t('tagLinksRule1')}</li>
@@ -344,10 +348,33 @@ onLongPress('[data-badge]', (el) => openBadgeEditor(el.dataset.badge));
 
 /* ---------- Gruppen ---------- */
 actions['grp-add'] = async () => { const n = await promptDialog({ title: t('groupAdd'), placeholder: t('groupPh') }); if (n) store.addGroup(n); };
-actions['grp-rename'] = async (el) => {
+/** Gruppe bearbeiten: Name und die Tag-Kategorien, die neue Artikel dieser Gruppe vorab erhalten. */
+actions['grp-rename'] = (el) => {
   const g = store.group(el.dataset.id);
-  const n = await promptDialog({ title: t('edit'), value: store.nm(g) });
-  if (n) store.renameGroup(g.id, n);
+  const st = { cats: [...(store.defaultCatsFor(g.id))] };
+  const h = openSheet({
+    title: t('edit'),
+    cls: 'sheet--small',
+    render: () => `<label class="lbl" for="ge-name">${t('name')}</label>
+      <input id="ge-name" class="field" type="text" maxlength="40" value="${esc(store.nm(g))}">
+      <div class="lbl">${t('catGroupDefault')}</div>
+      <div class="chips">${store.tagCats().map((c) => `<button type="button" class="chip ${st.cats.includes(c.id) ? 'on' : ''}" data-act="ge-cat" data-id="${c.id}">${esc(store.nm(c))}</button>`).join('')}</div>`,
+    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="ge-ok">${icon('check')} ${t('save')}</button>`,
+    actions: {
+      'ge-cat': (b) => {
+        const id = b.dataset.id;
+        st.cats = st.cats.includes(id) ? st.cats.filter((c) => c !== id) : [...st.cats, id];
+        b.classList.toggle('on', st.cats.includes(id));
+      },
+      'ge-ok': () => {
+        const n = h.el.querySelector('#ge-name').value.trim();
+        if (!n) { toast(t('nameReq'), 'warn'); return; }
+        if (n !== store.nm(g)) store.renameGroup(g.id, n);
+        store.setGroupCats(g.id, st.cats);
+        closeSheet();
+      },
+    },
+  });
 };
 actions['grp-up'] = (el) => store.moveGroup(el.dataset.id, -1);
 actions['grp-down'] = (el) => store.moveGroup(el.dataset.id, 1);
@@ -358,7 +385,30 @@ actions['grp-del'] = async (el) => {
 };
 
 /* ---------- Tags ---------- */
-actions['tag-add'] = () => openTagForm(null);
+actions['tag-add'] = (el) => openTagForm(null, null, el.dataset.cat);
+actions['cat-add'] = async () => {
+  if (store.tagCats().length >= store.LIMITS.tagCats) { toast(t('catsFull'), 'warn'); return; }
+  const n = await promptDialog({ title: t('catNew'), placeholder: t('catPh') });
+  if (n) store.addTagCat(n);
+};
+actions['cat-edit'] = (el) => {
+  const c = store.tagCat(el.dataset.id);
+  openSheet({
+    title: store.nm(c),
+    cls: 'sheet--small',
+    render: () => `<div class="btn-stack"><button class="btn" type="button" data-act="ce-rename">${icon('edit')} ${t('edit')}</button>
+      <button class="btn btn--danger" type="button" data-act="ce-del">${icon('trash')} ${t('catDelete')}</button></div>`,
+    actions: {
+      'ce-rename': async () => {
+        const n = await promptDialog({ title: t('edit'), value: store.nm(c), placeholder: t('catPh') });
+        if (n) { store.renameTagCat(c.id, n); closeSheet(); }
+      },
+      'ce-del': async () => {
+        if (await confirmDialog({ title: t('catDelete'), text: t('catDeleteText'), ok: t('delete'), danger: true })) { store.deleteTagCat(c.id); closeSheet(); }
+      },
+    },
+  });
+};
 actions['tag-edit'] = (el) => {
   const g = store.tag(el.dataset.id);
   const h = openSheet({
@@ -383,7 +433,12 @@ actions['link-up'] = (el) => store.moveTagLink(Number(el.dataset.i), -1);
 actions['link-down'] = (el) => store.moveTagLink(Number(el.dataset.i), 1);
 actions['link-add'] = () => {
   const st = { a: null, b: null };
-  const pick = (which) => `<div class="tagrow">${store.tags().map((g) => tagChip(g, { on: st[which] === g.id, act: 'lk-' + which, attrs: `data-id="${g.id}"` })).join('')}</div>`;
+  // Verknüpft werden können nur Tags derselben Kategorie: das zweite Tag richtet sich nach dem ersten
+  const pick = (which) => {
+    const cat = store.tag(st.a)?.cat;
+    const list = which === 'b' && cat ? store.tagsOfCat(cat) : store.tags();
+    return `<div class="tagrow">${list.map((g) => tagChip(g, { on: st[which] === g.id, act: 'lk-' + which, attrs: `data-id="${g.id}"` })).join('')}</div>`;
+  };
   const h = openSheet({
     title: t('linkAdd'),
     render: () => `<p class="hint">${t('tagLinksHint')}</p>
@@ -391,7 +446,7 @@ actions['link-add'] = () => {
       <div class="lbl">${t('linkSecond')}</div>${pick('b')}`,
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="lk-ok">${icon('check')} ${t('save')}</button>`,
     actions: {
-      'lk-a': (el) => { st.a = el.dataset.id; h.redraw(); },
+      'lk-a': (el) => { st.a = el.dataset.id; if (st.b && store.tag(st.b)?.cat !== store.tag(st.a)?.cat) st.b = null; h.redraw(); },
       'lk-b': (el) => { st.b = el.dataset.id; h.redraw(); },
       'lk-ok': () => {
         if (!st.a || !st.b || st.a === st.b) { toast(t('linkNeedTwo'), 'warn'); return; }

@@ -3,7 +3,7 @@
 import { t } from './i18n.js';
 import { icon, openSheet, closeSheet, toast } from './ui.js';
 
-const OUT = 160; // Kantenlänge des gespeicherten Vorschaubilds
+const OUT = 480; // Kantenlänge des gespeicherten Fotos (reicht für die große Ansicht, ca. 30-60 KB)
 
 /** Öffnet den Editor für eine Bilddatei; liefert die data-URL oder null (abgebrochen). */
 export async function openPhotoEditor(file) {
@@ -101,7 +101,7 @@ export async function openPhotoEditor(file) {
           const out = document.createElement('canvas');
           out.width = out.height = OUT;
           draw(out, OUT);
-          result = out.toDataURL('image/jpeg', 0.75);
+          result = out.toDataURL('image/jpeg', 0.8);
           closeSheet();
         },
       },

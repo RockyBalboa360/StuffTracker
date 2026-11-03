@@ -1,0 +1,11 @@
+Stuff Tracker Change Requests:
+
+1. Fotos vergrößern bei antippen.
+2. Lupenfunktion in Karte Bestand, Item in der Bildschirmmitte werden größter dargestellt beim scrollen.
+3. Klick auf ein item in einem Ort in Karte Bestand führt zu Bestand an dem Ort und nicht zur Übersicht über alle Orte.
+4. Im Bestand eines Items soll eine verlinkung/drop Down Menu für die dieses Item an den weiteren Orten verfügbar sein.
+5. Tags werden in Kategorien zusammengestellt, der user definiert die tag Kategorien für jedes angelegte Item:
+	5.1. Tag-Kategorien Sauberkeit: schmutzig, dreckig, getragen, beschädigt, verloren
+	5.2. Tag-Kategorie Farben: Schwarz, Grau, Blau, Grün, Oliv, Wei?, Midnight Green, Dark Grey, Navy, Dark Jeans, Dark Slate Grey
+	5.3. Tag-Kategorie technischer Zustand einsatzfähig, einsatzbereit, einsatzbereit, bedingt einsatzbereit, jeweils negative Variante
+	5.4. Tag-Kategorie Ladezustand: geladen, entladen, >50%, <50%, unbekannt

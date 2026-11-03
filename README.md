@@ -11,6 +11,17 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
 - **Artikel in Gruppen** (zwei Ebenen), Foto als kleines Vorschaubild (Kamera oder Galerie). Nach der Auswahl öffnet der
   **Foto-Editor**: mit zwei Knöpfen links/rechts drehen, mit Finger oder Regler (bzw. Mausrad) vergrößern und verschieben –
   der Rahmen ist der Ausschnitt (quadratisch).
+- **Tag-Kategorien:** Tags sind in Kategorien geordnet (Standard: Sauberkeit, Farben, Technischer Zustand, Ladezustand; weitere
+  und eigene Tags/Kategorien unter Mehr → Tags). Je Artikel wählst du, welche Kategorien gelten (beim Anlegen oder unter
+  „Bearbeiten“; Vorgabe je Gruppe einstellbar). Ein Stück trägt je Kategorie höchstens ein Tag (z. B. sauber **und** schwarz);
+  die Summe der Tag-Mengen einer Kategorie ist höchstens die Gesamtmenge, höchstens 6 verschiedene Tags je Kategorie, Artikel
+  und Ort. Tag-Verknüpfungen gelten nur innerhalb einer Kategorie. Kisten, Zu-/Abgang und Startseite arbeiten je Kategorie.
+- **Artikel aus der Bestandsliste eines Ortes:** Der Dialog zeigt zuerst diesen Ort; „Weitere Orte“ klappt auf (je Ort eine
+  Zeile mit Tag-Kreisen und Menge, antippen für die volle Karte). Aus „Alle“ erscheinen alle Orte wie bisher.
+- **Fotos:** Antippen eines Fotos (Liste oder Artikel) zeigt es groß; die Kamera-Schaltfläche am Foto ändert es. Neue Fotos werden
+  mit 480 px gespeichert (ältere bleiben bei 160 px; zum Verbessern neu aufnehmen).
+- **Lupe / Walze:** In der Bestandsliste ist die Zeile in der Bildschirmmitte am größten, nach oben/unten werden die Zeilen kleiner
+  und blasser. Unter Mehr → Darstellung abschaltbar.
 - **Heller Modus:** Schilder (Kopf, Gruppen, Wetter, Kacheln, Fußleiste, Dialog-Köpfe) sind weiß mit schwarzer Linie, der
   Hintergrund ist ein ruhiges Hellgrau ohne Karomuster.
 - **Mindestbestand:** Warnung wahlweise *beim Unterschreiten* (weniger als n) oder *beim Erreichen* (n oder weniger) – das

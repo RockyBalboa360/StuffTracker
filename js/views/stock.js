@@ -1,7 +1,7 @@
 // Bestand: Gruppen -> Artikel, Ortsfilter, Suche.
 import { t } from '../i18n.js';
 import * as store from '../store.js';
-import { esc, icon, badge, tagDot, untaggedDot, thumb, actions, ui, placeLook, PALETTE } from '../ui.js';
+import { esc, icon, badge, tagDots, thumb, actions, ui, placeLook, PALETTE } from '../ui.js';
 
 const selPlace = () => {
   const p = ui.place || store.currentPlaceId();
@@ -30,17 +30,13 @@ export function haystack(it, pid) {
   const parts = [store.nm(it), store.nm(store.group(it.groupId))];
   for (const [id, e] of Object.entries(it.stock)) {
     if (pid && id !== pid) continue;
-    Object.keys(e.tags).forEach((g) => parts.push(store.nm(store.tag(g))));
+    Object.keys(e.tags).forEach((g) => { parts.push(store.nm(store.tag(g))); parts.push(store.nm(store.tagCat(store.tag(g)?.cat))); });
   }
   return parts.join(' ').toLowerCase();
 }
 
-/** Kreise für ein Stück-Bündel: zuerst die Stücke ohne Tag (transparent), dann je aktives Tag. */
-function dotsFor(tags, total) {
-  const tagged = Object.values(tags).reduce((a, b) => a + b, 0);
-  const free = Math.max(0, total - tagged);
-  return (free > 0 ? untaggedDot(free) : '') + store.tagCounts(tags).map(([g, n]) => tagDot(g, n)).join('');
-}
+/** Kreise für ein Stück-Bündel, je Tag-Kategorie ein Block: zuerst die Stücke ohne Tag (transparent), dann je aktives Tag. */
+const dotsFor = (tags, total) => tagDots(tags, total);
 
 /** Ansicht „Alle“: je Ort Symbol, Gesamtzahl und kleine Kreise nur für die dort aktiven Tags. */
 function placeStock(it, p) {
@@ -66,8 +62,9 @@ function row(it, pid, all) {
     ? `<span class="pq pq--transit" title="${t('tab.transport')}"><span class="tbadge">${icon('transport', 18)}</span><i class="pq-n">${transit.total}</i>${dotsFor(transit.tags, transit.total)}</span>` : '';
   const bottom = places + transitHtml;
   const ss = store.settings();
-  return `<button class="row" type="button" data-act="item-open" data-item="${it.id}">
-    ${thumb(it, 'md', { photos: ss.listPhotos !== false, letters: ss.listLetters !== false })}
+  // Ist ein Ort gewählt, öffnet der Artikel mit diesem Ort im Vordergrund (data-place); in „Alle“ mit allen Orten.
+  return `<button class="row" type="button" data-act="item-open" data-item="${it.id}" ${all ? '' : `data-place="${pid}"`}>
+    ${thumb(it, 'md', { photos: ss.listPhotos !== false, letters: ss.listLetters !== false, zoom: true })}
     <span class="row-main"><b>${esc(store.nm(it))}</b>
       ${bottom ? `<span class="row-places">${bottom}</span>` : ''}</span>
     <span class="row-qty ${low ? 'low' : ''}">${low ? icon('alert', 16) : ''}<b>${qty}</b></span>
@@ -162,7 +159,44 @@ export function refreshStock() {
   return false;
 }
 
-actions['stock-place'] = (el) => { ui.place = el.dataset.p; ui.search = ''; window.dispatchEvent(new Event('st:render')); };
+/* ---------- Lupe / Walze ----------
+ * Beim Scrollen wirkt die Liste wie eine Walze: die Zeile in der Bildschirmmitte ist am größten und voll sichtbar,
+ * nach oben und unten werden die Zeilen kleiner, leicht gekippt und blasser. In den Einstellungen abschaltbar (settings.lens). */
+let lensRaf = 0;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function applyLens() {
+  lensRaf = 0;
+  const list = document.getElementById('stock-list');
+  const main = document.getElementById('main');
+  if (!list || !main) return;
+  const rows = [...list.querySelectorAll('.row')];
+  const on = ui.tab === 'stock' && store.settings().lens !== false && !reduceMotion.matches;
+  list.classList.toggle('lens', on);
+  if (!on) { rows.forEach((r) => { r.style.transform = ''; r.style.opacity = ''; }); return; }
+  const mr = main.getBoundingClientRect();
+  const navTop = document.getElementById('nav')?.getBoundingClientRect().top ?? mr.bottom;
+  const top = mr.top; const bottom = Math.min(mr.bottom, navTop);
+  const mid = (top + bottom) / 2; const half = Math.max(1, (bottom - top) / 2);
+  const centers = rows.map((r) => { const b = r.getBoundingClientRect(); return (b.top + b.bottom) / 2; }); // erst alles lesen, dann schreiben
+  rows.forEach((r, i) => {
+    const d = Math.max(-1.2, Math.min(1.2, (centers[i] - mid) / half));
+    const a = Math.abs(d);
+    const s = 1.035 - 0.115 * Math.min(1, a) ** 1.4;
+    r.style.transform = `perspective(900px) rotateX(${(-d * 20).toFixed(1)}deg) scale(${s.toFixed(3)})`;
+    r.style.opacity = (1 - 0.5 * Math.min(1, a) ** 2).toFixed(2);
+  });
+}
+const scheduleLens = () => { if (!lensRaf) lensRaf = requestAnimationFrame(applyLens); };
+{
+  const main = document.getElementById('main');
+  if (main) {
+    main.addEventListener('scroll', scheduleLens, { passive: true });
+    new MutationObserver(scheduleLens).observe(main, { childList: true, subtree: true });
+  }
+  window.addEventListener('resize', scheduleLens);
+}
+
+actions['stock-place'] =(el) => { ui.place = el.dataset.p; ui.search = ''; window.dispatchEvent(new Event('st:render')); };
 actions['grp-toggle'] = (el) => {
   const g = el.dataset.g;
   ui.collapsed[g] = !ui.collapsed[g];

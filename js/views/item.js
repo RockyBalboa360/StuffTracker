@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import * as store from '../store.js';
 import {
-  esc, icon, badge, tagChip, thumb, stepper, stepHandlers, actions, openSheet, closeSheet, topSheet,
+  esc, icon, badge, tagChip, tagDots, thumb, stepper, stepHandlers, actions, openSheet, closeSheet, topSheet,
   toast, confirmDialog, PALETTE, arrow,
 } from '../ui.js';
 import { pickPhotoFile } from '../photo.js';
@@ -25,22 +25,33 @@ function addTagTo(item, place, tag) {
 }
 
 /* ================= Detail ================= */
+/** Tag-Zeilen einer Kategorie für einen Bestandseintrag: aktive Tags mit Stückzahl, darunter die inaktiven zum Aktivieren. */
+function catBlock(it, p, e, c) {
+  const active = store.tagCounts(e.tags).filter(([g]) => g.cat === c.id);
+  const rest = store.untagged(e, c.id);
+  const inactive = store.tagsOfCat(c.id).filter((g) => !(e.tags[g.id] > 0));
+  return `<div class="catblock">
+    <div class="catname">${esc(store.nm(c))}</div>
+    ${active.map(([g, n]) => `<div class="tagline">${tagChip(g)}${stepper({ value: n, min: 0, max: store.tagMax(it.id, p.id, g.id), on: 'tag-count', args: { item: it.id, place: p.id, tag: g.id } })}</div>`).join('')}
+    ${active.length && rest > 0 ? `<div class="tagline tagline--none"><span class="tag-ph">${t('noTag')}</span><span class="countbox" aria-label="${t('noTag')}: ${rest}">${rest}</span></div>` : ''}
+    <div class="tagrow">
+      ${inactive.map((g) => tagChip(g, { on: false, act: 'item-tag', attrs: `data-item="${it.id}" data-place="${p.id}" data-tag="${g.id}"` })).join('')}
+      <button class="tag tag--add" type="button" data-act="item-tag-new" data-item="${it.id}" data-place="${p.id}" data-cat="${c.id}" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
+    </div>
+  </div>`;
+}
+
 function placeCard(it, p) {
   const e = it.stock[p.id];
   const qty = e?.qty || 0;
   const res = store.reserved(it.id, p.id);
   const low = store.isLow(it, p.id);
-  const active = store.tagCounts(e?.tags);
-  const rest = e ? store.untagged(e) : 0;
+  const cats = store.itemCats(it);
   const tags = qty > 0
-    ? `<div class="tagbox">
-        ${active.map(([g, n]) => `<div class="tagline">${tagChip(g)}${stepper({ value: n, min: 0, max: store.tagMax(it.id, p.id, g.id), on: 'tag-count', args: { item: it.id, place: p.id, tag: g.id } })}</div>`).join('')}
-        ${rest > 0 ? `<div class="tagline tagline--none"><span class="tag-ph">${t('noTag')}</span><span class="countbox" aria-label="${t('noTag')}: ${rest}">${rest}</span></div>` : ''}
-        <div class="tagrow">
-          ${store.tags().filter((g) => !(e.tags[g.id] > 0)).map((g) => tagChip(g, { on: false, act: 'item-tag', attrs: `data-item="${it.id}" data-place="${p.id}" data-tag="${g.id}"` })).join('')}
-          <button class="tag tag--add" type="button" data-act="item-tag-new" data-item="${it.id}" data-place="${p.id}" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
-        </div>
-      </div>` : '';
+    ? (cats.length
+      ? `<div class="tagbox tagbox--cats">${cats.map((c) => catBlock(it, p, e, c)).join('')}</div>`
+      : `<button class="linkbtn" type="button" data-act="item-edit" data-item="${it.id}">${icon('plus', 16)} ${t('catsPick')}</button>`)
+    : '';
   return `<section class="pcard ${low ? 'low' : ''}" data-place="${p.id}">
     <header class="pcard-h">${badge(p, 'sm')}<h4>${esc(p.name)}</h4>
       ${low ? `<span class="warn">${icon('alert', 16)} ${t('low')}</span>` : ''}</header>
@@ -59,7 +70,14 @@ function placeCard(it, p) {
   </section>`;
 }
 
-function itemBody(id) {
+/** Eine Zeile je weiterem Ort (Ort, Tag-Kreise, Menge); Antippen klappt die volle Karte des Ortes auf. */
+function placeSummary(it, p, open) {
+  const e = it.stock[p.id]; const qty = e?.qty || 0;
+  return `<button class="osum ${open ? 'open' : ''}" type="button" data-act="item-oplace" data-place="${p.id}" aria-expanded="${open}">
+    ${badge(p, 'sm')}<b>${esc(p.name)}</b><span class="osum-dots">${qty > 0 ? tagDots(e.tags, qty) : ''}</span><i class="osum-qty">${qty}</i>${icon('chevron', 20)}</button>`;
+}
+
+function itemBody(id, focus, st) {
   const it = store.item(id);
   if (!it) return '';
   const cur = store.currentPlaceId();
@@ -67,8 +85,27 @@ function itemBody(id) {
   const ret = store.retiredFor(id);
   const retN = ret.reduce((a, r) => a + r.qty, 0);
   const transit = store.inTransit(id);
+  const fp = focus && store.place(focus) ? store.place(focus) : null;
+  let placesHtml;
+  if (fp) {
+    // Aus der Bestandsliste eines Ortes geöffnet: dieser Ort steht im Vordergrund, die übrigen sind aufklappbar.
+    const others = ps.filter((p) => p.id !== fp.id);
+    placesHtml = `${placeCard(it, fp)}
+      <div class="others">
+        <button class="others-h ${st.more ? 'open' : ''}" type="button" data-act="item-more" aria-expanded="${!!st.more}">
+          ${icon('pin', 16)} <span>${t('otherPlaces')}</span>
+          <span class="acc-sum">${others.map((p) => `${badge(p, 'xs')}<small>${store.qtyAt(it, p.id)}</small>`).join('')}</span>${icon('chevron', 20)}</button>
+        ${st.more ? others.map((p) => placeSummary(it, p, st.exp.has(p.id)) + (st.exp.has(p.id) ? placeCard(it, p) : '')).join('') : ''}
+      </div>`;
+  } else {
+    placesHtml = ps.map((p) => placeCard(it, p)).join('');
+  }
+  const hasPhoto = !!store.photo(id);
   return `<div class="item-top">
-      <button class="photo-btn" type="button" data-act="item-photo" data-item="${id}" aria-label="${t('photo')}">${thumb(it, 'xl')}<span class="photo-cam">${icon('camera', 16)}</span></button>
+      <div class="photo-wrap">
+        <button class="photo-btn" type="button" data-act="${hasPhoto ? 'photo-zoom' : 'item-photo'}" data-item="${id}" aria-label="${t(hasPhoto ? 'photoZoom2' : 'photo')}">${thumb(it, 'xl')}</button>
+        <button class="photo-cam" type="button" data-act="item-photo" data-item="${id}" aria-label="${t('photo')}">${icon('camera', 16)}</button>
+      </div>
       <div class="item-meta">
         <h3>${esc(store.nm(it))}</h3>
         <div class="muted">${esc(store.nm(store.group(it.groupId)))}</div>
@@ -76,32 +113,40 @@ function itemBody(id) {
       </div>
     </div>
     ${transit ? `<div class="strip">${arrow('mini')} ${t('inTransit', { n: transit })}</div>` : ''}
-    ${ps.map((p) => placeCard(it, p)).join('')}
+    ${placesHtml}
     ${retN ? `<div class="strip strip--dim">${icon('ban', 16)} ${t('retiredTotal', { n: retN })}</div>` : ''}
     <button class="linkbtn linkbtn--danger" type="button" data-act="item-delete" data-item="${id}">${icon('trash', 16)} ${t('itemDelete')}</button>`;
 }
 
-export function openItem(id) {
-  openSheet({
+/** focusPlace: Ort aus der Bestandsliste; dann steht dieser Ort im Vordergrund und die übrigen sind aufklappbar. */
+export function openItem(id, focusPlace = null) {
+  const st = { more: false, exp: new Set() };
+  const h = openSheet({
     live: true,
     title: () => store.nm(store.item(id)),
-    render: () => itemBody(id),
+    render: () => itemBody(id, focusPlace, st),
+    actions: {
+      'item-more': () => { st.more = !st.more; h.redraw(); },
+      'item-oplace': (el) => { const p = el.dataset.place; if (!st.exp.delete(p)) st.exp.add(p); h.redraw(); },
+    },
   });
+  return h;
 }
 
-actions['item-open'] = (el) => openItem(el.dataset.item);
+actions['item-open'] = (el) => openItem(el.dataset.item, el.dataset.place || null);
 actions['item-tag'] = (el) => {
   const { item, place, tag } = el.dataset;
   addTagTo(item, place, tag);
 };
 actions['item-photo'] = (el) => openPhotoSheet(el.dataset.item);
+actions['photo-zoom'] = (el) => openPhotoViewer(el.dataset.item);
 actions['item-edit'] = (el) => openItemForm(el.dataset.item);
 actions['item-move'] = (el) => openMove(el.dataset.item, el.dataset.place);
 actions['item-retire'] = (el) => openRetire(el.dataset.item, el.dataset.place);
 actions['item-min'] = (el) => openMin(el.dataset.item, el.dataset.place);
 actions['item-tag-new'] = (el) => {
-  const { item, place } = el.dataset;
-  openTagForm(null, (g) => { if (g) addTagTo(item, place, g.id); });
+  const { item, place, cat } = el.dataset;
+  openTagForm(null, (g) => { if (g) addTagTo(item, place, g.id); }, cat);
 };
 actions['item-delete'] = async (el) => {
   const id = el.dataset.item;
@@ -111,6 +156,19 @@ actions['item-delete'] = async (el) => {
     setTimeout(() => store.deleteItem(id), 50);
   }
 };
+
+/* ================= Foto vergrößern ================= */
+/** Foto groß anzeigen (Antippen oder Zurück schließt). Das Foto kommt aus dem Foto-Speicher des Artikels. */
+export function openPhotoViewer(itemId) {
+  const src = store.photo(itemId);
+  if (!src) return null;
+  const it = store.item(itemId);
+  return openSheet({
+    cls: 'sheet--photo',
+    title: store.nm(it),
+    render: () => `<button type="button" class="photo-big" data-sheet-close aria-label="${t('close')}"><img src="${src}" alt="${esc(store.nm(it))}"></button>`,
+  });
+}
 
 /* ================= Foto ================= */
 export function openPhotoSheet(itemId, onPick) {
@@ -145,22 +203,34 @@ export function openPhotoSheet(itemId, onPick) {
 export function openItemForm(itemId, presetPlace) {
   const it = itemId ? store.item(itemId) : null;
   const cur = store.place(presetPlace) ? presetPlace : store.currentPlaceId();
-  const st = { name: it ? store.nm(it) : '', groupId: it?.groupId || store.groups()[0]?.id, placeId: cur, qty: 1, photo: null, photoSet: false, tags: {} };
-  const sumTags = () => Object.values(st.tags).reduce((a, b) => a + b, 0);
-  /** Tags und Anzahl je Tag direkt beim Anlegen: die Summe bleibt höchstens so groß wie die Gesamtmenge. */
+  const g0 = it?.groupId || store.groups()[0]?.id;
+  const st = {
+    name: it ? store.nm(it) : '', groupId: g0, placeId: cur, qty: 1, photo: null, photoSet: false, tags: {},
+    cats: it ? [...(it.cats || [])] : [...store.defaultCatsFor(g0)], catsTouched: !!it,
+  };
+  const sumCat = (cat) => store.catSum(st.tags, cat);
+  const kinds = (cat) => Object.keys(st.tags).filter((k) => store.tag(k)?.cat === cat).length;
+  /** Kategorien-Auswahl: welche Tag-Arten gelten für diesen Artikel. */
+  const catChips = () => `<div class="lbl">${t('catsTitle')}</div>
+    <div class="chips">${store.tagCats().map((c) => `<button type="button" class="chip ${st.cats.includes(c.id) ? 'on' : ''}" data-act="f-cat" data-id="${c.id}">${esc(store.nm(c))}</button>`).join('')}</div>
+    ${st.cats.length ? '' : `<p class="hint">${t('catsNone')}</p>`}`;
+  /** Tags und Anzahl je gewählter Kategorie direkt beim Anlegen: je Kategorie bleibt die Summe höchstens die Gesamtmenge. */
   const tagSection = (q) => {
     if (q <= 0) return '';
-    const active = store.tagCounts(st.tags);
-    const rest = q - sumTags();
+    const cats = store.tagCats().filter((c) => st.cats.includes(c.id));
+    if (!cats.length) return '';
     return `<div class="lbl">${t('tagsAndCount')}</div>
-      <div class="tagbox">
-        ${active.map(([g, n]) => `<div class="tagline">${tagChip(g)}${stepper({ value: n, min: 0, max: n + rest, on: 'nf-tag', args: { tag: g.id } })}</div>`).join('')}
-        ${active.length ? `<div class="tagline tagline--none"><span class="tag-ph">${t('noTag')}</span><span class="countbox">${rest}</span></div>` : ''}
-        <div class="tagrow">
-          ${store.tags().filter((g) => !(st.tags[g.id] > 0)).map((g) => tagChip(g, { on: false, act: 'nf-tag-add', attrs: `data-tag="${g.id}"` })).join('')}
-          <button class="tag tag--add" type="button" data-act="nf-tag-new" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
-        </div>
-      </div>`;
+      <div class="tagbox tagbox--cats">${cats.map((c) => {
+    const active = store.tagCounts(st.tags).filter(([g]) => g.cat === c.id);
+    const rest = q - sumCat(c.id);
+    return `<div class="catblock"><div class="catname">${esc(store.nm(c))}</div>
+          ${active.map(([g, n]) => `<div class="tagline">${tagChip(g)}${stepper({ value: n, min: 0, max: n + rest, on: 'nf-tag', args: { tag: g.id } })}</div>`).join('')}
+          ${active.length ? `<div class="tagline tagline--none"><span class="tag-ph">${t('noTag')}</span><span class="countbox">${rest}</span></div>` : ''}
+          <div class="tagrow">
+            ${store.tagsOfCat(c.id).filter((g) => !(st.tags[g.id] > 0)).map((g) => tagChip(g, { on: false, act: 'nf-tag-add', attrs: `data-tag="${g.id}"` })).join('')}
+            <button class="tag tag--add" type="button" data-act="nf-tag-new" data-cat="${c.id}" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
+          </div></div>`;
+  }).join('')}</div>`;
   };
   const h = openSheet({
     title: it ? t('edit') : t('itemNew'),
@@ -170,6 +240,7 @@ export function openItemForm(itemId, presetPlace) {
       <div class="chips sugg-inline" id="f-sugg"></div>
       <label class="lbl" for="f-group">${t('group')}</label>
       <select id="f-group" class="field">${store.groups().map((g) => `<option value="${g.id}" ${g.id === st.groupId ? 'selected' : ''}>${esc(store.nm(g))}</option>`).join('')}</select>
+      ${catChips()}
       ${it ? '' : `
         <div class="nf-two">
           <div class="nf-photo">
@@ -189,15 +260,27 @@ export function openItemForm(itemId, presetPlace) {
         st.placeId = el.dataset.id;
         h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el));
       },
+      'f-cat': (el) => {
+        const id = el.dataset.id;
+        st.catsTouched = true;
+        if (st.cats.includes(id)) {
+          st.cats = st.cats.filter((c) => c !== id);
+          for (const k of Object.keys(st.tags)) if (store.tag(k)?.cat === id) delete st.tags[k];
+        } else st.cats.push(id);
+        h.redraw();
+      },
       'f-photo': () => openPhotoSheet(null, (data) => { st.photo = data; st.photoSet = true; h.redraw(); }),
       'nf-tag-add': (el) => addLocalTag(el.dataset.tag),
-      'nf-tag-new': () => openTagForm(null, (g) => { if (g) addLocalTag(g.id); }),
+      'nf-tag-new': (el) => openTagForm(null, (g) => { if (g) addLocalTag(g.id); }, el.dataset.cat),
       'f-sugg': (el) => {
         const nameInput = h.el.querySelector('#f-name');
         nameInput.value = el.dataset.v;
         h.el.querySelector('#f-sugg').innerHTML = '';
         const known = store.findByName(el.dataset.v, it?.id);
-        if (known && !it) { st.groupId = known.groupId; h.el.querySelector('#f-group').value = known.groupId; }
+        if (known && !it) {
+          st.groupId = known.groupId; h.el.querySelector('#f-group').value = known.groupId;
+          st.cats = [...(known.cats || [])]; st.catsTouched = true; h.redraw();
+        }
       },
       'f-save': async () => {
         const nameInput = h.el.querySelector('#f-name');
@@ -206,7 +289,15 @@ export function openItemForm(itemId, presetPlace) {
         const dup = store.findByName(name, it?.id);
         if (it) {
           if (dup) { toast(t('nameTaken'), 'warn'); nameInput.focus(); return; }
+          // Kategorien, die wegfallen: Rückfrage, wenn dafür noch Tags gesetzt sind
+          const gone = (it.cats || []).filter((c) => !st.cats.includes(c));
+          const used = gone.map((c) => [c, store.catUsage(it.id, c)]).filter(([, n]) => n > 0);
+          if (used.length) {
+            const text = used.map(([c, n]) => t('catRemoveText', { cat: store.nm(store.tagCat(c)), n })).join(' ');
+            if (!(await confirmDialog({ title: t('catRemoveTitle'), text, ok: t('delete'), danger: true }))) return;
+          }
           store.updateItem(it.id, { name, groupId: st.groupId });
+          store.setItemCats(it.id, st.cats);
         } else {
           const q = h.qty ?? 1;
           if (dup) {
@@ -218,10 +309,10 @@ export function openItemForm(itemId, presetPlace) {
               ok: t('mergeYes'), cancel: t('mergeNo'),
             });
             if (!yes) { toast(t('nameTaken'), 'warn'); nameInput.focus(); nameInput.select(); return; }
-            if (!store.mergeStock(dup.id, st.placeId, { qty: q, tags: st.tags, photoData: st.photo })) { toast(t('bookFail'), 'warn'); return; }
+            if (!store.mergeStock(dup.id, st.placeId, { qty: q, tags: st.tags, photoData: st.photo, cats: st.cats })) { toast(t('bookFail'), 'warn'); return; }
             toast(t('merged', { name: store.nm(dup), n: q }));
           } else {
-            store.addItem({ name, groupId: st.groupId, placeId: st.placeId, qty: q, photoData: st.photo, tags: st.tags });
+            store.addItem({ name, groupId: st.groupId, placeId: st.placeId, qty: q, photoData: st.photo, tags: st.tags, cats: st.cats });
             toast(t('itemCreated'));
           }
         }
@@ -230,7 +321,16 @@ export function openItemForm(itemId, presetPlace) {
     },
   });
   h.qty = 1;
-  h.el.addEventListener('change', (e) => { if (e.target.id === 'f-group') st.groupId = e.target.value; });
+  // Gruppe gewählt: Tag-Kategorien der Gruppe vorschlagen, solange die Kategorien nicht von Hand geändert wurden
+  h.el.addEventListener('change', (e) => {
+    if (e.target.id !== 'f-group') return;
+    st.groupId = e.target.value;
+    if (!st.catsTouched) {
+      st.cats = [...store.defaultCatsFor(st.groupId)];
+      for (const k of Object.keys(st.tags)) if (!st.cats.includes(store.tag(k)?.cat)) delete st.tags[k];
+      h.redraw();
+    }
+  });
   // Textvorschläge aus bereits bekannten Bezeichnungen (nur beim Anlegen)
   if (!it) {
     h.el.addEventListener('input', (e) => {
@@ -244,26 +344,32 @@ export function openItemForm(itemId, presetPlace) {
   // Name bei Redraw (z. B. nach Foto) erhalten
   const origRedraw = h.redraw;
   h.redraw = () => { st.name = h.el.querySelector('#f-name')?.value ?? st.name; origRedraw(); };
-  // Menge ändern: überzählige Tag-Stücke werden von hinten gekürzt, die Tag-Zeilen neu berechnet
+  // Menge ändern: überzählige Tag-Stücke werden je Kategorie von hinten gekürzt, die Tag-Zeilen neu berechnet
   h.onQty = (v) => {
     h.qty = v;
-    let over = sumTags() - v;
-    for (const k of Object.keys(st.tags).reverse()) {
-      if (over <= 0) break;
-      const cut = Math.min(st.tags[k], over); st.tags[k] -= cut; over -= cut;
-      if (st.tags[k] <= 0) delete st.tags[k];
+    for (const c of store.tagCats()) {
+      let over = sumCat(c.id) - v;
+      for (const k of Object.keys(st.tags).reverse()) {
+        if (over <= 0) break;
+        if (store.tag(k)?.cat !== c.id) continue;
+        const cut = Math.min(st.tags[k], over); st.tags[k] -= cut; over -= cut;
+        if (st.tags[k] <= 0) delete st.tags[k];
+      }
     }
     h.redraw();
   };
   h.onTag = (tag, v) => {
-    const others = sumTags() - (st.tags[tag] || 0);
+    const cat = store.tag(tag)?.cat;
+    const others = sumCat(cat) - (st.tags[tag] || 0);
     v = Math.max(0, Math.min(v, (h.qty ?? 1) - others));
     if (v > 0) st.tags[tag] = v; else delete st.tags[tag];
     h.redraw();
   };
   function addLocalTag(tag) {
-    const free = (h.qty ?? 1) - sumTags();
-    if (Object.keys(st.tags).length >= store.LIMITS.tagsPerEntry) { toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn'); return; }
+    const cat = store.tag(tag)?.cat;
+    if (!st.cats.includes(cat)) { st.cats.push(cat); st.catsTouched = true; }
+    const free = (h.qty ?? 1) - sumCat(cat);
+    if (kinds(cat) >= store.LIMITS.tagsPerEntry) { toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn'); return; }
     if (free <= 0) { toast(t('noFreePieces'), 'warn'); return; }
     st.tags[tag] = free;
     h.redraw();
@@ -279,7 +385,8 @@ stepHandlers['mv-r'] = (a, v) => topSheet()?.onPair?.('r', a.k, v);
 
 /**
  * Stücke in eine Kiste legen. Links der Bestand am Ort (gesamt und je Tag), rechts die Menge in der Kiste (startet bei 0):
- * Was rechts erhöht wird, geht links vom Bestand ab. Die Tag-Mengen bestimmen die Gesamtmenge der Kiste.
+ * Was rechts erhöht wird, geht links vom Bestand ab. Je Tag-Kategorie bleibt die Summe der Tags höchstens die Gesamtmenge
+ * der Kiste; wird ein Tag über die Gesamtmenge erhöht, steigt die Gesamtmenge mit.
  */
 export function openMove(itemId, placeId) {
   const it = store.item(itemId);
@@ -289,40 +396,31 @@ export function openMove(itemId, placeId) {
   const others = store.places().filter((p) => p.id !== placeId);
   const drafts = store.transports().filter((x) => x.status === 'draft' && x.from === placeId);
   const free = store.freeTags(it, placeId);
-  const freePlain = Math.max(0, avail - Object.values(free).reduce((a, b) => a + b, 0));
-  const tagRows = store.tags().filter((g) => free[g.id] > 0);
-  const st = { mode: drafts.length ? 'existing' : 'new', sel: drafts[0]?.id || null, dest: others[0]?.id, name: '', choice: '', alloc: {}, plain: 0 };
-  const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
-  const total = () => sum(st.alloc) + st.plain;
-  const maxOf = (k) => (k === 'total' ? avail : k === 'plain' ? freePlain : free[k] || 0);
-  const curOf = (k) => (k === 'total' ? total() : k === 'plain' ? st.plain : st.alloc[k] || 0);
+  const catRows = store.itemCats(it).map((c) => ({ c, tags: store.tagsOfCat(c.id).filter((g) => free[g.id] > 0) })).filter((x) => x.tags.length);
+  const st = { mode: drafts.length ? 'existing' : 'new', sel: drafts[0]?.id || null, dest: others[0]?.id, name: '', choice: '', qty: 0, alloc: {} };
+  const maxOf = (k) => (k === 'total' ? avail : free[k] || 0);
+  const curOf = (k) => (k === 'total' ? st.qty : st.alloc[k] || 0);
 
-  /** Gesamtmenge der Kiste ändern: mehr -> zuerst Stücke ohne Tag, dann Tags der Reihe nach; weniger -> umgekehrt. */
+  /** Gesamtmenge der Kiste ändern; Tags einer Kategorie werden bei Bedarf von hinten gekürzt. */
   function setTotal(v) {
-    v = Math.max(0, Math.min(v, avail));
-    let diff = v - total();
-    if (diff > 0) {
-      const add = Math.min(diff, freePlain - st.plain); st.plain += add; diff -= add;
-      for (const g of tagRows) {
-        if (diff <= 0) break;
-        const a = Math.min(diff, free[g.id] - (st.alloc[g.id] || 0));
-        if (a > 0) { st.alloc[g.id] = (st.alloc[g.id] || 0) + a; diff -= a; }
-      }
-    } else if (diff < 0) {
-      let rem = -diff;
-      const c = Math.min(rem, st.plain); st.plain -= c; rem -= c;
-      for (const g of [...tagRows].reverse()) {
-        if (rem <= 0) break;
-        const a = Math.min(rem, st.alloc[g.id] || 0);
-        if (a > 0) { st.alloc[g.id] -= a; rem -= a; if (st.alloc[g.id] <= 0) delete st.alloc[g.id]; }
+    st.qty = Math.max(0, Math.min(v, avail));
+    for (const { c, tags } of catRows) {
+      let over = store.catSum(st.alloc, c.id) - st.qty;
+      for (const g of [...tags].reverse()) {
+        if (over <= 0) break;
+        const cut = Math.min(over, st.alloc[g.id] || 0);
+        if (cut > 0) { st.alloc[g.id] -= cut; over -= cut; if (st.alloc[g.id] <= 0) delete st.alloc[g.id]; }
       }
     }
   }
   function setKey(k, v) {
-    v = Math.max(0, Math.min(v, maxOf(k)));
-    if (k === 'total') setTotal(v);
-    else if (k === 'plain') st.plain = v;
-    else if (v > 0) st.alloc[k] = v; else delete st.alloc[k];
+    if (k === 'total') { setTotal(v); return; }
+    v = Math.max(0, Math.min(v, free[k] || 0));
+    const cat = store.tag(k)?.cat;
+    const othersSum = store.catSum(st.alloc, cat) - (st.alloc[k] || 0);
+    if (othersSum + v > st.qty) st.qty = Math.min(avail, othersSum + v); // Tags bestimmen die Gesamtmenge mit
+    v = Math.min(v, st.qty - othersSum);
+    if (v > 0) st.alloc[k] = v; else delete st.alloc[k];
   }
   const pair = (label, k) => `<div class="mvrow">
       <div class="mvlab">${label}</div>
@@ -339,8 +437,7 @@ export function openMove(itemId, placeId) {
       <p class="hint">${t('mvHint')}</p>
       <div class="mvhead"><span>${t('mvStock', { place: esc(from.name) })}</span><span>${t('mvBox')}</span></div>
       ${pair(`<b>${t('totalQty')}</b>`, 'total')}
-      ${tagRows.map((g) => pair(tagChip(g), g.id)).join('')}
-      ${freePlain > 0 && tagRows.length ? pair(`<span class="tag-ph">${t('noTag')}</span>`, 'plain') : ''}
+      ${catRows.map(({ c, tags }) => `<div class="catname catname--mv">${esc(store.nm(c))}</div>${tags.map((g) => pair(tagChip(g), g.id)).join('')}`).join('')}
       <div class="lbl">${t('whichBox')}</div>
       <p class="hint">${t('boxExplain')}</p>
       ${drafts.length ? `<div class="segmented">
@@ -355,13 +452,13 @@ export function openMove(itemId, placeId) {
         <div class="lbl">${t('destination')}</div>
         <div class="chips">${others.map((p) => `<button type="button" class="chip chip--badge ${p.id === st.dest ? 'on' : ''}" data-act="mv-dest" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
         ${boxNameHtml(st)}`}`,
-    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="mv-ok">${icon('box')} ${t('toBox')}${total() ? ` (${total()})` : ''}</button>`,
+    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="mv-ok">${icon('box')} ${t('toBox')}${st.qty ? ` (${st.qty})` : ''}</button>`,
     actions: {
       'mv-mode': (el) => { st.mode = el.dataset.v; h.redraw(); },
       'mv-sel': (el) => { st.sel = el.dataset.id; h.redraw(); },
       'mv-dest': (el) => { st.dest = el.dataset.id; h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el)); },
       'mv-ok': () => {
-        const q = total();
+        const q = st.qty;
         if (q <= 0) { toast(t('mvPickQty'), 'warn'); return; }
         let tid = st.mode === 'existing' ? st.sel : null;
         if (!tid) tid = store.createTransport({ from: placeId, to: st.dest, name: boxNameValue(st) }).id;
@@ -380,11 +477,11 @@ export function openMove(itemId, placeId) {
 }
 
 /* ================= Zu-/Abgang buchen (größere Mengen) ================= */
+stepHandlers['bk-qty'] = (_a, v) => topSheet()?.onQty?.(v);
 stepHandlers['bk-tag'] = (a, v) => topSheet()?.onTag?.(a.tag, v);
-stepHandlers['bk-plain'] = (_a, v) => topSheet()?.onPlain?.(v);
 
 /**
- * Größere Mengen eines Artikels an einem Ort zubuchen (Neukauf) oder abbuchen, je Tag.
+ * Größere Mengen eines Artikels an einem Ort zubuchen (Neukauf) oder abbuchen, gesamt und je Tag.
  * Anders als eine Kiste ändert das die Gesamtmenge. Zugang kann direkt in eine Kiste gelegt werden.
  */
 export function openBook(itemId, placeId) {
@@ -393,27 +490,31 @@ export function openBook(itemId, placeId) {
   const others = store.places().filter((p) => p.id !== placeId);
   const drafts = store.transports().filter((x) => x.status === 'draft' && x.from === placeId);
   const canBox = others.length > 0;
-  const st = { out: false, counts: {}, plain: 0, extra: [], toBox: false, sel: drafts[0]?.id || 'new', dest: others[0]?.id, name: '', choice: '' };
+  const st = { out: false, qty: 0, counts: {}, extra: [], toBox: false, sel: drafts[0]?.id || 'new', dest: others[0]?.id, name: '', choice: '' };
   const cur = () => it.stock[placeId];
-  const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
-  const total = () => sum(st.counts) + st.plain;
-  /** Tags, die hier eine Zeile haben: bereits am Ort aktive plus beim Zugang frisch aktivierte. */
-  const rowTags = () => {
+  const catSum = (cat) => store.catSum(st.counts, cat);
+  /** Tags einer Kategorie mit Zeile: bereits am Ort aktive plus beim Zugang frisch aktivierte (beim Abgang nur freie). */
+  const rowTags = (cat) => {
     const have = store.tagCounts(cur()?.tags).map(([g]) => g.id);
-    const ids = st.out ? have : [...have, ...st.extra.filter((x) => !have.includes(x))];
-    return store.tags().filter((g) => ids.includes(g.id));
+    const lim = st.out ? store.freeTags(it, placeId) : null;
+    return store.tagsOfCat(cat).filter((g) => (have.includes(g.id) || (!st.out && st.extra.includes(g.id))) && (!st.out || lim[g.id] > 0));
   };
-  const outLimits = () => {
-    const free = store.freeTags(it, placeId);
-    return { free, plain: Math.max(0, store.available(it, placeId) - Object.values(free).reduce((a, b) => a + b, 0)) };
-  };
+  const maxQty = () => (st.out ? store.available(it, placeId) : 99999);
   const body = () => {
-    const lim = st.out ? outLimits() : null;
-    const rows = rowTags().filter((g) => !st.out || lim.free[g.id] > 0);
     const q = cur()?.qty || 0;
-    const next = st.out ? q - total() : q + total();
-    const inactive = st.out ? [] : store.tags().filter((g) => !rowTags().some((r) => r.id === g.id));
-    const plainMax = st.out ? lim.plain : 99999;
+    const next = st.out ? q - st.qty : q + st.qty;
+    const free = st.out ? store.freeTags(it, placeId) : null;
+    const catsHtml = store.itemCats(it).map((c) => {
+      const rows = rowTags(c.id);
+      const inactive = st.out ? [] : store.tagsOfCat(c.id).filter((g) => !rows.some((r) => r.id === g.id));
+      if (st.out && !rows.length) return '';
+      return `<div class="catblock"><div class="catname">${esc(store.nm(c))}</div>
+        ${rows.map((g) => `<div class="tagline">${tagChip(g)}${stepper({ value: st.counts[g.id] || 0, min: 0, max: st.out ? free[g.id] : 99999, on: 'bk-tag', args: { tag: g.id } })}</div>`).join('')}
+        ${st.out ? '' : `<div class="tagrow">
+          ${inactive.map((g) => tagChip(g, { on: false, act: 'bk-tag-add', attrs: `data-tag="${g.id}"` })).join('')}
+          <button class="tag tag--add" type="button" data-act="bk-tag-new" data-cat="${c.id}" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
+        </div>`}</div>`;
+    }).join('');
     return `
       <div class="strip">${thumb(it, 'sm')} <div><b>${esc(store.nm(it))}</b><div class="muted">${badge(pl, 'xs')} ${esc(pl.name)} · ${t('totalQty')} ${q}</div></div></div>
       <div class="segmented">
@@ -421,17 +522,10 @@ export function openBook(itemId, placeId) {
         <button type="button" class="${st.out ? 'on' : ''}" data-act="bk-mode" data-v="out">${icon('minus', 18)} ${t('bookOut')}</button>
       </div>
       <p class="hint">${t(st.out ? 'bookHintOut' : 'bookHint')}</p>
-      <div class="lbl">${t('tagsAndCount')}</div>
-      <div class="tagbox">
-        ${rows.map((g) => `<div class="tagline">${tagChip(g)}${stepper({ value: st.counts[g.id] || 0, min: 0, max: st.out ? lim.free[g.id] : 99999, on: 'bk-tag', args: { tag: g.id } })}</div>`).join('')}
-        ${!st.out || plainMax > 0 ? `<div class="tagline tagline--none"><span class="tag-ph">${t('noTag')}</span>${stepper({ value: st.plain, min: 0, max: plainMax, on: 'bk-plain' })}</div>` : ''}
-        ${inactive.length || !st.out ? `<div class="lbl lbl--in">${t('bookMoreTags')}</div>
-        <div class="tagrow">
-          ${inactive.map((g) => tagChip(g, { on: false, act: 'bk-tag-add', attrs: `data-tag="${g.id}"` })).join('')}
-          <button class="tag tag--add" type="button" data-act="bk-tag-new" aria-label="${t('tagNew')}">${icon('plus', 16)}</button>
-        </div>` : ''}
-      </div>
-      <div class="strip strip--sum"><span>${t('bookSum')}: <b>${st.out ? '−' : '+'}${total()}</b></span><span class="sum-next">${t('bookNew')}: <b>${next}</b></span></div>
+      <div class="lbl">${t('amount')}</div>
+      <div class="pad">${stepper({ value: st.qty, min: 0, max: maxQty(), on: 'bk-qty' })}</div>
+      ${catsHtml ? `<div class="lbl">${t('tagsAndCount')}</div><div class="tagbox tagbox--cats">${catsHtml}</div>` : ''}
+      <div class="strip strip--sum"><span>${t('bookSum')}: <b>${st.out ? '−' : '+'}${st.qty}</b></span><span class="sum-next">${t('bookNew')}: <b>${next}</b></span></div>
       ${!st.out && canBox ? `
         <button type="button" class="switch ${st.toBox ? 'on' : ''}" data-act="bk-box" role="switch" aria-checked="${st.toBox}"><i></i><span>${t('bookToBox')}</span></button>
         ${st.toBox ? `
@@ -448,27 +542,25 @@ export function openBook(itemId, placeId) {
             <div class="chips">${others.map((p) => `<button type="button" class="chip chip--badge ${p.id === st.dest ? 'on' : ''}" data-act="bk-dest" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
             ${boxNameHtml(st)}` : ''}` : ''}` : ''}`;
   };
+  const activate = (tagId) => {
+    const g = store.tag(tagId);
+    if (rowTags(g.cat).length >= store.LIMITS.tagsPerEntry) { toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn'); return; }
+    st.extra.push(tagId); h.redraw();
+  };
   const h = openSheet({
     title: t('bookTitle'),
     render: body,
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="bk-ok">${icon('check')} ${t(st.out ? 'bookOut' : 'bookIn')}</button>`,
     actions: {
-      'bk-mode': (el) => { st.out = el.dataset.v === 'out'; st.counts = {}; st.plain = 0; st.extra = []; h.redraw(); },
-      'bk-tag-add': (el) => {
-        if (rowTags().length >= store.LIMITS.tagsPerEntry) { toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn'); return; }
-        st.extra.push(el.dataset.tag); h.redraw();
-      },
-      'bk-tag-new': () => openTagForm(null, (g) => {
-        if (!g) return;
-        if (rowTags().length >= store.LIMITS.tagsPerEntry) { toast(t('tagMax', { n: store.LIMITS.tagsPerEntry }), 'warn'); return; }
-        st.extra.push(g.id); h.redraw();
-      }),
+      'bk-mode': (el) => { st.out = el.dataset.v === 'out'; st.qty = 0; st.counts = {}; st.extra = []; h.redraw(); },
+      'bk-tag-add': (el) => activate(el.dataset.tag),
+      'bk-tag-new': (el) => openTagForm(null, (g) => { if (g) activate(g.id); }, el.dataset.cat),
       'bk-box': () => { st.toBox = !st.toBox; h.redraw(); },
       'bk-sel': (el) => { st.sel = el.dataset.id; h.redraw(); },
       'bk-dest': (el) => { st.dest = el.dataset.id; h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el)); },
       'bk-ok': () => {
-        if (total() <= 0) { toast(t('bookNone'), 'warn'); return; }
-        const r = store.bookStock(itemId, placeId, { tags: st.counts, plain: st.plain, out: st.out });
+        if (st.qty <= 0) { toast(t('bookNone'), 'warn'); return; }
+        const r = store.bookStock(itemId, placeId, { qty: st.qty, tags: st.counts, out: st.out });
         if (!r) { toast(t('bookFail'), 'warn'); return; }
         if (st.out) toast(t('bookDoneOut', { n: r.qty }));
         else if (st.toBox) {
@@ -482,13 +574,28 @@ export function openBook(itemId, placeId) {
     },
   });
   bindBoxName(h, st);
+  h.onQty = (v) => {
+    st.qty = Math.max(0, Math.min(v, maxQty()));
+    for (const c of store.tagCats()) {
+      let over = catSum(c.id) - st.qty;
+      for (const g of [...store.tagsOfCat(c.id)].reverse()) {
+        if (over <= 0) break;
+        const cut = Math.min(over, st.counts[g.id] || 0);
+        if (cut > 0) { st.counts[g.id] -= cut; over -= cut; if (st.counts[g.id] <= 0) delete st.counts[g.id]; }
+      }
+    }
+    h.redraw();
+  };
   h.onTag = (tag, v) => {
-    const max = st.out ? (outLimits().free[tag] || 0) : 99999;
+    const cat = store.tag(tag)?.cat;
+    const max = st.out ? (store.freeTags(it, placeId)[tag] || 0) : 99999;
     v = Math.max(0, Math.min(v, max));
+    const othersSum = catSum(cat) - (st.counts[tag] || 0);
+    if (othersSum + v > st.qty) st.qty = Math.min(maxQty(), othersSum + v); // Tags bestimmen die Gesamtmenge mit
+    v = Math.min(v, st.qty - othersSum);
     if (v > 0) st.counts[tag] = v; else delete st.counts[tag];
     h.redraw();
   };
-  h.onPlain = (v) => { st.plain = Math.max(0, Math.min(v, st.out ? outLimits().plain : 99999)); h.redraw(); };
   return h;
 }
 actions['item-book'] = (el) => openBook(el.dataset.item, el.dataset.place);
@@ -547,7 +654,7 @@ export function openMin(itemId, placeId) {
       <p class="hint">${t('minTagHint')}</p>
       <div class="chips">
         <button type="button" class="chip ${st.tag ? '' : 'on'}" data-act="mn-tag" data-id="">${t('minTagNone')}</button>
-        ${store.tags().map((g) => tagChip(g, { on: st.tag === g.id, act: 'mn-tag', attrs: `data-id="${g.id}"` })).join('')}
+        ${store.tags().filter((g) => store.item(itemId).cats?.includes(g.cat)).map((g) => tagChip(g, { on: st.tag === g.id, act: 'mn-tag', attrs: `data-id="${g.id}"` })).join('')}
       </div>`,
     footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="mn-ok">${icon('check')} ${t('save')}</button>`,
     actions: {
@@ -561,16 +668,18 @@ export function openMin(itemId, placeId) {
 }
 
 /* ================= Tag anlegen / bearbeiten ================= */
-export function openTagForm(tagId, done) {
+export function openTagForm(tagId, done, catPreset) {
   const g = tagId ? store.tag(tagId) : null;
   if (!g && store.tags().length >= store.LIMITS.tagsTotal) { toast(t('tagsFull'), 'warn'); return; }
-  const st = { color: g?.color || PALETTE.blue };
+  const st = { color: g?.color || PALETTE.blue, cat: g?.cat || (store.tagCat(catPreset) ? catPreset : store.tagCats()[0]?.id) };
   const h = openSheet({
     title: g ? t('edit') : t('tagNew'),
     cls: 'sheet--small',
     render: () => `
       <label class="lbl" for="tg-name">${t('name')}</label>
-      <input id="tg-name" class="field" type="text" maxlength="18" value="${esc(g ? store.nm(g) : '')}" placeholder="${t('tagPh')}">
+      <input id="tg-name" class="field" type="text" maxlength="24" value="${esc(g ? store.nm(g) : '')}" placeholder="${t('tagPh')}">
+      ${g ? `<p class="hint">${t('catPlace')}: ${esc(store.nm(store.tagCat(g.cat)))}</p>` : `<label class="lbl" for="tg-cat">${t('catPlace')}</label>
+      <select id="tg-cat" class="field">${store.tagCats().map((c) => `<option value="${c.id}" ${c.id === st.cat ? 'selected' : ''}>${esc(store.nm(c))}</option>`).join('')}</select>`}
       ${!g || g.style === 'plain' ? `<div class="lbl">${t('color')}</div>
       <div class="swatches">${Object.values(PALETTE).map((c) => `<button type="button" class="swatch ${c === st.color ? 'on' : ''}" style="--sw:${c}" data-act="tg-color" data-c="${c}" aria-label="${c}"></button>`).join('')}</div>
       <div class="pad" id="tg-prev"></div>` : ''}`,
@@ -582,13 +691,14 @@ export function openTagForm(tagId, done) {
         if (!name) { toast(t('nameReq'), 'warn'); return; }
         let res;
         if (g) { store.updateTag(g.id, g.style === 'plain' ? { name, color: st.color } : { name }); res = store.tag(g.id); }
-        else res = store.addTag(name, st.color);
+        else res = store.addTag(name, st.color, st.cat);
         closeSheet();
         done?.(res);
       },
     },
     mount: (hh) => preview(hh),
   });
+  h.el.addEventListener('change', (e) => { if (e.target.id === 'tg-cat') st.cat = e.target.value; });
   function preview(hh = h) {
     const p = hh.el.querySelector('#tg-prev');
     if (p) p.innerHTML = tagChip({ style: 'plain', color: st.color, name: hh.el.querySelector('#tg-name')?.value || t('tagPh') });
