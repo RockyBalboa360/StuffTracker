@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import * as store from '../store.js';
 import {
-  esc, icon, badge, tagCountChips, thumb, stepper, stepHandlers, actions, openSheet, closeSheet, topSheet,
+  esc, icon, badge, tagChip, tagCountChips, thumb, stepper, stepHandlers, actions, openSheet, closeSheet, topSheet,
   toast, confirmDialog, promptDialog, arrow, fmtDate, today, ui,
 } from '../ui.js';
 
@@ -43,12 +43,15 @@ export function renderTransport() {
     sent: (a, b) => String(b.sentAt).localeCompare(String(a.sentAt)),
     done: (a, b) => String(b.arrivedAt || b.cancelledAt).localeCompare(String(a.arrivedAt || a.cancelledAt)),
   };
-  const list = [...groups[seg]].sort(sortFn[seg]);
-  const tabs = ['draft', 'sent', 'done'].map((k) =>
-    `<button class="seg ${seg === k ? 'on' : ''}" type="button" data-act="tr-seg" data-s="${k}">${t('seg.' + k)}<span class="count">${groups[k].length}</span></button>`).join('');
+  // „Anfragen“: alle sichtbaren Anforderungen (offene zuerst, erledigte der letzten 24 Stunden danach)
+  const reqs = store.places().flatMap((p) => store.requestsOf(p.id)).sort((a, b) => (store.reqProgress(a).done - store.reqProgress(b).done) || a.createdAt - b.createdAt);
+  const list = seg === 'req' ? reqs : [...(groups[seg] || groups.draft)].sort(sortFn[seg] || sortFn.draft);
+  const counts = { ...Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, v.length])), req: reqs.filter((r) => !store.reqProgress(r).done).length };
+  const tabs = ['draft', 'sent', 'req', 'done'].map((k) =>
+    `<button class="seg ${seg === k ? 'on' : ''}" type="button" data-act="tr-seg" data-s="${k}">${t('seg.' + k)}<span class="count">${counts[k]}</span></button>`).join('');
   return `<header class="sign"><h1>${t('tab.transport')}</h1></header>
     <div class="segs">${tabs}</div>
-    <div class="list">${list.length ? list.map(transportCard).join('') : `<div class="empty">${arrow('big')}<p>${t('emptyTr.' + seg)}</p></div>`}</div>
+    <div class="list">${list.length ? list.map((x) => (seg === 'req' ? requestCard(x, { meta: true }) : transportCard(x))).join('') : `<div class="empty">${arrow('big')}<p>${t('emptyTr.' + seg)}</p></div>`}</div>
     <button class="fab" type="button" data-act="tr-new" aria-label="${t('trNew')}">${icon('plus', 28)}</button>`;
 }
 actions['tr-seg'] = (el) => { ui.seg = el.dataset.s; window.dispatchEvent(new Event('st:render')); };
@@ -100,11 +103,82 @@ export function bindBoxName(h, st) {
   });
 }
 
+/* ================= Anforderungen (Karten) ================= */
+const sumTake = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+/** Status-Pillen und Fortschrittsbalken einer Anforderung. */
+function reqStatus(r) {
+  const p = store.reqProgress(r);
+  const pills = [];
+  if (p.done) pills.push(`<span class="pill pill--ok">${t('reqStDone')}</span>`);
+  else {
+    if (p.arrived) pills.push(`<span class="pill pill--ok">${t('reqStArrived', { n: p.arrived })}</span>`);
+    if (p.sent) pills.push(`<span class="pill pill--way">${t('reqStSent', { n: p.sent })}</span>`);
+    if (p.draft) pills.push(`<span class="pill pill--part">${t('reqStDraft', { n: p.draft })}</span>`);
+    if (p.remaining) pills.push(`<span class="pill pill--open">${p.arrived || p.sent || p.draft ? t('reqRemaining', { n: p.remaining }) : t('reqStOpen')}</span>`);
+  }
+  const w = (n) => `${Math.min(100, (n / r.qty) * 100).toFixed(0)}%`;
+  return `<span class="rq-st">${pills.join('')}</span>
+    <span class="bar"><i class="a" style="width:${w(p.arrived)}"></i><i class="b" style="width:${w(p.sent + p.draft)}"></i></span>`;
+}
+const reqTagChips = (r) => (r.tags || []).map((k) => store.tag(k)).filter(Boolean).map((g) => tagChip(g, { small: true })).join('');
+
+/**
+ * Karte einer Anforderung. mode 'own' = antippen öffnet sie zum Bearbeiten; mode 'asked' = an diesen Ort gerichtet,
+ * mit Button „Kiste nach …“. meta zeigt zusätzlich, wer anfordert und an wen sie gerichtet ist.
+ */
+export function requestCard(r, { mode = 'own', meta = false, from = null } = {}) {
+  const it = store.item(r.itemId);
+  if (!it) return '';
+  const pl = store.place(r.placeId); const to = store.place(r.toPlace);
+  const metaHtml = meta
+    ? `<span class="rq-meta">${badge(pl, 'xs')} ${esc(pl.name)}${to ? ` ${arrow('mini')} ${badge(to, 'xs')} ${esc(to.name)}` : ` · ${t('reqAllPlaces')}`}</span>`
+    : (to ? `<span class="rq-meta">${t('reqToPlace', { place: esc(to.name) })}</span>` : '');
+  const tags = reqTagChips(r);
+  if (mode === 'asked') {
+    const free = store.reqTakeable(r, from);
+    return `<div class="rq rq--for">${thumb(it, 'md')}
+      <span class="rq-main"><b>${esc(store.nm(it))}</b>
+        <span class="muted">${badge(pl, 'xs')} ${t('reqFromPlace', { place: esc(pl.name) })} · ${free ? t('reqInStock', { n: free }) : t('reqNoneFree')}</span>
+        ${tags ? `<span class="tagrow">${tags}</span>` : ''}${r.note ? `<span class="muted">„${esc(r.note)}“</span>` : ''}
+        <span><span class="btn btn--sm btn--primary" role="button" data-act="req-box" data-from="${from}" data-to="${r.placeId}">${icon('box', 16)} ${t('reqBoxTo', { place: esc(pl.name) })}</span></span></span>
+      <span class="rq-n">${store.reqProgress(r).remaining}</span></div>`;
+  }
+  const done = store.reqProgress(r).done;
+  return `<button class="rq" type="button" data-act="req-open" data-id="${r.id}" ${done ? 'style="opacity:.75"' : ''}>${thumb(it, 'md')}
+    <span class="rq-main"><b>${esc(store.nm(it))}</b>${metaHtml}${tags ? `<span class="tagrow">${tags}</span>` : ''}${reqStatus(r)}</span>
+    <span class="rq-n">${r.qty}</span></button>`;
+}
+actions['req-box'] = (el) => openTransportForm(el.dataset.from, el.dataset.to);
+
 /* ================= Neuer Transport ================= */
-export function openTransportForm(preFrom) {
+stepHandlers['rq-take'] = (a, v) => topSheet()?.onTake?.(a.id, v);
+
+export function openTransportForm(preFrom, preTo) {
   const ps = store.places();
-  const st = { from: preFrom || store.currentPlaceId(), to: null, choice: '', name: '' };
-  st.to = ps.find((p) => p.id !== st.from)?.id;
+  const st = { from: preFrom || store.currentPlaceId(), to: null, choice: '', name: '', take: {} };
+  st.to = ps.find((p) => p.id === preTo && p.id !== st.from)?.id || ps.find((p) => p.id !== st.from)?.id;
+  /** Höchstmenge für eine Anforderung: Rest und freie Stücke, abzüglich dessen, was für denselben Artikel schon gewählt ist. */
+  const capOf = (r) => {
+    const others = store.requests().filter((x) => x.id !== r.id && x.itemId === r.itemId).reduce((a, x) => a + (st.take[x.id] || 0), 0);
+    return Math.max(0, Math.min(store.reqTakeable(r, st.from) - others, store.reqProgress(r).remaining));
+  };
+  const needs = () => store.requestsForBox(st.from, st.to);
+  const needsHtml = () => {
+    const list = needs();
+    if (!list.length) return '';
+    const to = store.place(st.to);
+    return `<div class="need-h"><span class="lbl" style="margin:0">${t('reqBoxTitle', { place: esc(to.name), n: list.length })}</span>
+        <button class="linkbtn" type="button" data-act="tf-all">${t('reqTakeAll')}</button></div>
+      ${list.map((r) => {
+    const it = store.item(r.itemId); const free = store.reqTakeable(r, st.from); const cap = capOf(r);
+    const tags = reqTagChips(r);
+    return `<div class="need ${r.toPlace === st.from ? 'need--for' : ''}" style="${free ? '' : 'opacity:.55'}">${thumb(it, 'md')}
+        <span class="rq-main"><b>${esc(store.nm(it))}</b>
+          <span class="muted">${r.toPlace === st.from ? `${t('reqDirected', { place: esc(store.place(st.from).name) })} · ` : `${t('reqAllPlaces')} · `}${t('reqAsked', { n: store.reqProgress(r).remaining })} · ${t('reqInStock', { n: free })}</span>
+          ${tags ? `<span class="tagrow">${tags}</span>` : ''}${r.note ? `<span class="muted">„${esc(r.note)}“</span>` : ''}</span>
+        ${free ? stepper({ value: st.take[r.id] || 0, min: 0, max: (st.take[r.id] || 0) + cap, on: 'rq-take', args: { id: r.id }, cls: 'stepper--c' }) : `<span class="pill pill--way">${t('reqNotHere')}</span>`}</div>`;
+  }).join('')}`;
+  };
   const h = openSheet({
     title: t('trNew'),
     cls: 'sheet--small',
@@ -113,21 +187,41 @@ export function openTransportForm(preFrom) {
       <div class="chips">${ps.map((p) => `<button type="button" class="chip chip--badge ${p.id === st.from ? 'on' : ''}" data-act="tf-from" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
       <div class="lbl">${t('to')}</div>
       <div class="chips">${ps.filter((p) => p.id !== st.from).map((p) => `<button type="button" class="chip chip--badge ${p.id === st.to ? 'on' : ''}" data-act="tf-to" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
+      ${needsHtml()}
       ${boxNameHtml(st)}`,
-    footer: () => `<button class="btn btn--primary btn--block" type="button" data-act="tf-ok">${icon('box')} ${t('create')}</button>`,
+    footer: () => {
+      const n = sumTake(st.take);
+      return `<button class="btn btn--primary btn--block" type="button" data-act="tf-ok">${icon('box')} ${n ? t('reqCreateN', { n }) : t('create')}</button>`;
+    },
     actions: {
-      'tf-from': (el) => { st.from = el.dataset.id; if (st.to === st.from) st.to = ps.find((p) => p.id !== st.from).id; h.redraw(); },
-      'tf-to': (el) => { st.to = el.dataset.id; h.redraw(); },
+      'tf-from': (el) => { st.from = el.dataset.id; st.take = {}; if (st.to === st.from) st.to = ps.find((p) => p.id !== st.from).id; h.redraw(); },
+      'tf-to': (el) => { st.to = el.dataset.id; st.take = {}; h.redraw(); },
+      'tf-all': () => {
+        st.take = {};
+        for (const r of needs()) { const c = capOf(r); if (c > 0) st.take[r.id] = c; }
+        h.redraw();
+      },
       'tf-ok': () => {
         const tr = store.createTransport({ from: st.from, to: st.to, name: boxNameValue(st) });
+        for (const r of needs()) {
+          const n = st.take[r.id] || 0;
+          if (n > 0) store.addLine(tr.id, r.itemId, n, store.reqAlloc(r, st.from, n) || undefined, r.id);
+        }
         closeSheet();
         setTimeout(() => openTransport(tr.id), 260);
       },
     },
   });
   bindBoxName(h, st);
+  h.onTake = (id, v) => {
+    const r = store.request(id); if (!r) return;
+    const prev = st.take[id] || 0;
+    const cap = capOf(r) + prev;
+    v = Math.max(0, Math.min(v, cap));
+    if (v > 0) st.take[id] = v; else delete st.take[id];
+    h.redraw();
+  };
 }
-
 /* ================= Detail ================= */
 function lineRow(tr, l) {
   const it = store.item(l.itemId);

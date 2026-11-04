@@ -2,7 +2,7 @@
 import { t, getLang } from '../i18n.js';
 import * as store from '../store.js';
 import { esc, icon, badge, tagChip, actions, openSheet, closeSheet, ui, arrow, placeLook } from '../ui.js';
-import { transportCard, openTransportForm } from './transport.js';
+import { transportCard, requestCard, openTransportForm } from './transport.js';
 import { rowAll, haystack } from './stock.js';
 import { openItemForm } from './item.js';
 import { openLocationSheet } from './settings.js';
@@ -210,6 +210,8 @@ export function renderHome() {
   const auto = store.settings().placeMode !== 'manual';
   const isDefault = pid === store.currentPlaceId();
   const q = (ui.homeSearch || '').trim();
+  /** Fehlende Stückzahl bis der Mindestbestand nicht mehr warnt (beim Erreichen-Modus: ein Stück darüber). */
+  const lowNeed = (e) => Math.max(1, e.min.v - store.minCount(e) + (store.minMode(e) === 'reach' ? 1 : 0));
 
   const net = store.places().map((pl) => {
     const n = store.items().reduce((a, it) => a + store.qtyAt(it, pl.id), 0);
@@ -222,7 +224,9 @@ export function renderHome() {
   // Unterwegs hierher: abgeschickte Kisten plus Kisten, die in den letzten 24 Stunden angekommen sind.
   const recent = store.transports().filter((x) => x.status === 'arrived' && x.to === pid && Date.now() - store.arrivedTs(x) < 24 * 3600000);
   const incomingAll = [...incoming, ...recent];
-  const quiet = !incomingAll.length && !outgoing.length && !drafts.length && !lows.length;
+  const asked = store.requestsAskedAt(pid); // an diesen Ort gerichtet
+  const mine = store.requestsOf(pid); // von diesem Ort angefordert
+  const quiet =!incomingAll.length && !outgoing.length && !drafts.length && !lows.length && !asked.length && !mine.length;
 
   // Reihenfolge: Ort-Buttons, Suche, Kopf, Sicherungs-Hinweis, Kacheln, Warnungen, Kisten, Tags, Wetter, Widget.
   return `<nav class="netbar" aria-label="${t('places')}">${net}</nav>
@@ -246,14 +250,18 @@ export function renderHome() {
       <div class="quick">
         <button class="btn" type="button" data-act="qa-item" data-p="${pid}">${icon('plus')} ${t('itemNew')}</button>
         <button class="btn" type="button" data-act="qa-box" data-p="${pid}">${icon('box')} ${t('boxNewShort')}</button>
+        <button class="btn" type="button" data-act="req-new" data-place="${pid}">${icon('download')} ${t('reqBtn')}</button>
       </div>
       ${lows.length ? `<h2 class="h2 h2--warn">${icon('alert', 18)} ${t('lowStock')}</h2>
         <div class="list">${lows.map(({ item, entry }) => `<button class="row row--low" type="button" data-act="item-open" data-item="${item.id}" data-place="${pid}">
-          <span class="row-main"><b>${esc(store.nm(item))}</b><span class="muted">${store.minLabel(entry)}</span></span>
+          <span class="row-main"><b>${esc(store.nm(item))}</b><span class="muted">${store.minLabel(entry)}</span>
+            <span><span class="btn btn--sm btn--primary row-ask" role="button" data-act="req-from-low" data-item="${item.id}" data-place="${pid}" data-n="${lowNeed(entry)}">${icon('download', 16)} ${t('reqFromLow', { n: lowNeed(entry) })}</span></span></span>
           <span class="row-qty low">${icon('alert', 16)}<b>${store.minCount(entry)}</b></span></button>`).join('')}</div>` : ''}
+      ${asked.length ? `<h2 class="h2 h2--ask">${icon('alert', 18)} ${t('reqAskedYou')} <span class="count">${asked.length}</span></h2><div class="list">${asked.map((r) => requestCard(r, { mode: 'asked', from: pid })).join('')}</div>` : ''}
       ${section(t('incoming'), incomingAll)}
       ${section(t('outgoing'), outgoing)}
       ${section(t('draftHeading'), drafts)}
+      ${mine.length ? `<h2 class="h2">${icon('download', 18)} ${t('reqAskedHere')} <span class="count">${mine.length}</span></h2><div class="list">${mine.map((r) => requestCard(r)).join('')}</div>` : ''}
       ${quiet ? `<div class="empty small">${arrow('big')}<p>${t('allQuiet')}</p></div>` : ''}
       ${tagOverview(pid, here)}
       ${weatherCard(pid)}

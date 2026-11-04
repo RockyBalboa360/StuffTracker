@@ -1,7 +1,7 @@
 // Zentraler Zustand + Persistenz (IndexedDB). Fotos liegen in eigenem Store.
 import { t, getLang } from './i18n.js';
 
-export const VERSION = '0.13.0';
+export const VERSION = '0.14.0';
 // tagsPerEntry gilt je Tag-Kategorie (höchstens so viele verschiedene Tags einer Kategorie je Artikel und Ort)
 export const LIMITS = { places: 5, minPlaces: 2, tagsPerEntry: 6, tagsTotal: 80, tagCats: 12 };
 
@@ -142,6 +142,11 @@ function migrate(d) {
     });
     d.items.forEach((it) => Object.values(it.stock).forEach((e) => normalize(e)));
     d.v = 7;
+  }
+  if (d.v < 8) {
+    // v8: Anforderungen zwischen Orten
+    d.requests ||= [];
+    d.v = 8;
   }
   d.settings.homeButtons ||= 'dashboard';
   return d;
@@ -457,6 +462,7 @@ export function deleteItem(id) {
     addLog('itemDel', { item: nm(it) });
     data.items = data.items.filter((i) => i.id !== id);
     data.retired = data.retired.filter((r) => r.itemId !== id);
+    data.requests = requests().filter((r) => r.itemId !== id);
     data.transports.forEach((tr) => { tr.lines = tr.lines.filter((l) => l.itemId !== id); });
     photos.delete(id); delPhoto(id);
   });
@@ -645,6 +651,8 @@ export function deletePlace(id) {
     data.transports = data.transports.filter((tr) => tr.from !== id && tr.to !== id);
     data.items.forEach((it) => { delete it.stock[id]; });
     data.retired = data.retired.filter((r) => r.placeId !== id);
+    data.requests = requests().filter((r) => r.placeId !== id);
+    requests().forEach((r) => { if (r.toPlace === id) r.toPlace = null; });
     if (data.settings.manualPlace === id) data.settings.manualPlace = null;
     if (data.settings.lastPlace === id) data.settings.lastPlace = null;
   });
@@ -744,7 +752,7 @@ export function createTransport({ from, to, name }) {
   });
 }
 /** Stück in eine Kiste legen. alloc = { tagId: anzahl } legt fest, wie viele davon welches Tag tragen. */
-export function addLine(tid, itemId, qty, alloc) {
+export function addLine(tid, itemId, qty, alloc, reqId = null) {
   const tr = transport(tid); const it = item(itemId);
   if (!tr || tr.status !== 'draft' || !it) return false;
   if (qty > available(it, tr.from)) return false;
@@ -752,6 +760,9 @@ export function addLine(tid, itemId, qty, alloc) {
   const free = freeTags(it, tr.from);
   if (!allocFits(alloc, qty) || Object.entries(alloc).some(([k, n]) => n > (free[k] || 0))) return false;
   const l = tr.lines.find((x) => x.itemId === itemId);
+  // Erfüllt die Zeile eine Anforderung des Zielortes? Dann merkt sich die Zeile, wie viel davon (höchstens der Rest).
+  const rq = reqId ? request(reqId) : null;
+  const credit = rq && rq.itemId === itemId && rq.placeId === tr.to ? Math.min(qty, reqProgress(rq).remaining) : 0;
   mutate(() => {
     if (l) {
       l.qty += qty;
@@ -759,8 +770,23 @@ export function addLine(tid, itemId, qty, alloc) {
     } else {
       tr.lines.push({ itemId, qty, tags: Object.fromEntries(Object.entries(alloc).filter(([, n]) => n > 0)) });
     }
+    if (credit > 0) {
+      const line = l || tr.lines[tr.lines.length - 1];
+      line.reqs ||= [];
+      const e = line.reqs.find((x) => x.id === reqId);
+      if (e) e.qty += credit; else line.reqs.push({ id: reqId, qty: credit });
+    }
   });
   return true;
+}
+/** Die Anrechnung auf Anforderungen darf nie größer sein als die Menge der Zeile (von hinten kürzen). */
+function trimReqs(l) {
+  if (!l.reqs) return;
+  let over = l.reqs.reduce((a, x) => a + x.qty, 0) - l.qty;
+  for (let i = l.reqs.length - 1; i >= 0 && over > 0; i--) {
+    const cut = Math.min(l.reqs[i].qty, over); l.reqs[i].qty -= cut; over -= cut;
+  }
+  l.reqs = l.reqs.filter((x) => x.qty > 0);
 }
 export function setLine(tid, itemId, qty) {
   const tr = transport(tid); const it = item(itemId);
@@ -771,7 +797,7 @@ export function setLine(tid, itemId, qty) {
   if (qty > max) qty = max;
   mutate(() => {
     if (qty === 0) tr.lines = tr.lines.filter((x) => x !== l);
-    else { l.qty = qty; trimTags(l.tags, qty); }
+    else { l.qty = qty; trimTags(l.tags, qty); trimReqs(l); }
   });
   return qty;
 }
@@ -803,6 +829,11 @@ export function arriveTransport(tid, dateISO) {
     }
     tr.status = 'arrived'; tr.arrivedAt = dateISO; tr.arrivedTs = Date.now();
     addLog('tArrive', { box: tr.name, to: place(tr.to)?.name, n: tr.lines.length });
+    // Anforderungen, die mit dieser Kiste vollständig geliefert sind, ins Protokoll
+    for (const l of tr.lines) for (const x of l.reqs || []) {
+      const r = request(x.id);
+      if (r && reqProgress(r).done) addLog('reqDone', { item: nm(item(r.itemId)), place: place(r.placeId)?.name, qty: r.qty });
+    }
   });
   return true;
 }
@@ -829,6 +860,81 @@ export function cancelTransport(tid) {
 }
 export function renameTransport(tid, name) { mutate(() => { transport(tid).name = name; }); }
 
+/* ---------- Anforderungen ----------
+ * Ein Ort (placeId) fordert einen Artikel (itemId) mit Stückzahl (qty) an, optional gerichtet an einen Ort (toPlace),
+ * mit Wunsch-Tags (tags = Tag-Ids, höchstens eines je Kategorie) und Notiz. Der Fortschritt wird aus den Kistenzeilen
+ * abgeleitet, die die Anforderung erfüllen (line.reqs): in Vorbereitung = vorgemerkt, abgeschickt = unterwegs, angekommen = da. */
+export const requests = () => data.requests || [];
+export const request = (id) => requests().find((r) => r.id === id);
+export function reqProgress(r) {
+  const p = { draft: 0, sent: 0, arrived: 0, ts: 0 };
+  for (const tr of data.transports) {
+    if (tr.status === 'cancelled') continue;
+    for (const l of tr.lines) {
+      const x = l.reqs?.find((q) => q.id === r.id);
+      if (!x) continue;
+      p[tr.status] += x.qty;
+      if (tr.status === 'arrived') p.ts = Math.max(p.ts, arrivedTs(tr));
+    }
+  }
+  p.remaining = Math.max(0, r.qty - p.draft - p.sent - p.arrived);
+  p.done = p.arrived >= r.qty;
+  return p;
+}
+/** Erledigte Anforderungen bleiben 24 Stunden sichtbar (wie angekommene Kisten). */
+const reqVisible = (r) => { const p = reqProgress(r); return !p.done || Date.now() - p.ts < 24 * 3600000; };
+export const requestsOf = (placeId) => requests().filter((r) => r.placeId === placeId && reqVisible(r));
+/** An diesen Ort gerichtete, noch offene Anforderungen anderer Orte. */
+export const requestsAskedAt = (placeId) => requests().filter((r) => r.toPlace === placeId && r.placeId !== placeId && reqProgress(r).remaining > 0);
+/** Offene Anforderungen des Ortes `to`, die der Ort `from` bedienen kann (gerichtet an `from` zuerst). */
+export const requestsForBox = (from, to) => requests()
+  .filter((r) => r.placeId === to && (!r.toPlace || r.toPlace === from) && reqProgress(r).remaining > 0)
+  .sort((a, b) => (b.toPlace === from) - (a.toPlace === from) || a.createdAt - b.createdAt);
+/** Offene Anforderungen anderer Orte für diesen Artikel, die der Ort `from` bedienen kann. */
+export const requestsForItem = (itemId, from) => requests()
+  .filter((r) => r.itemId === itemId && r.placeId !== from && (!r.toPlace || r.toPlace === from) && reqProgress(r).remaining > 0);
+export function addRequest({ itemId, placeId, toPlace = null, qty, tags = [], note = '' }) {
+  const it = item(itemId);
+  if (!it || !place(placeId) || !(qty > 0)) return null;
+  return mutate(() => {
+    const r = { id: uid(), itemId, placeId, toPlace: place(toPlace) && toPlace !== placeId ? toPlace : null, qty: Math.floor(qty), tags: tags.filter((k) => tag(k)), note: String(note || '').trim(), createdAt: Date.now() };
+    (data.requests ||= []).push(r);
+    addLog('reqNew', { item: nm(it), place: place(placeId)?.name, qty: r.qty });
+    return r;
+  });
+}
+export function updateRequest(id, patch) {
+  mutate(() => {
+    const r = request(id); if (!r) return;
+    if ('qty' in patch) r.qty = Math.max(1, Math.floor(patch.qty) || 1);
+    if ('toPlace' in patch) r.toPlace = place(patch.toPlace) && patch.toPlace !== r.placeId ? patch.toPlace : null;
+    if ('tags' in patch) r.tags = patch.tags.filter((k) => tag(k));
+    if ('note' in patch) r.note = String(patch.note || '').trim();
+  });
+}
+/** Anforderung zurückziehen; bereits vorgemerkte Kistenzeilen bleiben bestehen (ohne Bezug). */
+export function cancelRequest(id) {
+  mutate(() => {
+    const r = request(id); if (!r) return;
+    addLog('reqCancel', { item: nm(item(r.itemId)), place: place(r.placeId)?.name });
+    data.requests = data.requests.filter((x) => x.id !== id);
+    data.transports.forEach((tr) => tr.lines.forEach((l) => { if (l.reqs) l.reqs = l.reqs.filter((x) => x.id !== id); }));
+  });
+}
+/** Menge für die Anforderung, die am Ort `from` jetzt in eine Kiste gelegt werden kann (Rest, freie Stücke). */
+export function reqTakeable(r, from) {
+  const it = item(r.itemId);
+  return it ? Math.min(reqProgress(r).remaining, available(it, from)) : 0;
+}
+/** Zuordnung {tagId: n} für eine Menge: Wunsch-Tags, soweit am Ort frei; ohne Wunsch-Tags die Vorgabe (null = Vorgabe). */
+export function reqAlloc(r, from, qty) {
+  const it = item(r.itemId);
+  if (!it || !r.tags?.length) return null;
+  const free = freeTags(it, from); const out = {};
+  for (const k of r.tags) if (free[k] > 0) out[k] = Math.min(qty, free[k]);
+  return out;
+}
+
 /* ---------- Beispieldaten ---------- */
 export const hasSamples = () => data.items.some((i) => i.sample) || data.transports.some((x) => x.sample);
 export function clearSamples() {
@@ -836,6 +942,7 @@ export function clearSamples() {
     const ids = new Set(data.items.filter((i) => i.sample).map((i) => i.id));
     data.transports = data.transports.filter((tr) => !tr.sample && !tr.lines.some((l) => ids.has(l.itemId)));
     data.items = data.items.filter((i) => !i.sample);
+    data.requests = requests().filter((r) => !r.sample && !ids.has(r.itemId));
     data.retired = data.retired.filter((r) => !ids.has(r.itemId));
     data.log = data.log.filter((l) => !l.sample);
     data.settings.sampleCleared = true;
@@ -891,7 +998,8 @@ function seed(lang, empty = false) {
     .map((k) => ({ id: 'g_' + k, key: 'group.' + k, cats: GROUP_CATS['g_' + k] }));
   const tg = DEFAULT_TAGS.map(mkDefaultTag);
   const d = {
-    v: 7,
+    v: 8,
+    requests: [],
     tagCats: DEFAULT_CATS.map(mkDefaultCat),
     tagLinks: [['tg_clean', 'tg_dirty']],
     settings: {
@@ -916,7 +1024,8 @@ function seed(lang, empty = false) {
   const C = 'tg_clean', D_ = 'tg_dirty', L = 'tg_lost', X = 'tg_damaged';
   mk('sample.jeans', 'second', { 0: [3, { [C]: 3 }], 1: [1, { [C]: 1 }] });
   const tshirt = mk('sample.tshirt', 'base', { 0: [12, { [C]: 9, [D_]: 3 }], 2: [4, { [D_]: 4 }] });
-  mk('sample.longsleeve', 'base', { 0: [4, { [C]: 3, [D_]: 1 }], 2: [2, { [C]: 2 }] });
+  const longsleeve = mk('sample.longsleeve', 'base', { 0: [4, { [C]: 3, [D_]: 1 }], 2: [2, { [C]: 2 }] });
+  d.requests.push({ id: uid(), itemId: longsleeve.id, placeId: pl[1].id, toPlace: null, qty: 2, tags: [C], note: '', createdAt: Date.now() - DAY, sample: true });
   mk('sample.fleece', 'third', { 2: [2, { [C]: 2 }] });
   mk('sample.shell', 'third', { 0: [1, { [C]: 1 }], 2: [2, { [D_]: 1, [L]: 1 }] });
   const socks = mk('sample.socks', 'base', { 0: [10, { [C]: 10 }], 1: [3, { [C]: 3 }], 2: [2, { [D_]: 2 }] });

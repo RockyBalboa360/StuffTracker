@@ -63,6 +63,7 @@ function placeCard(it, p) {
     ${tags}
     <div class="pcard-actions">
       <button class="btn btn--sm" type="button" data-act="item-book" data-item="${it.id}" data-place="${p.id}">${icon('plus', 18)} ${t('bookBtn')}</button>
+      <button class="btn btn--sm" type="button" data-act="item-request" data-item="${it.id}" data-place="${p.id}">${icon('download', 18)} ${t('reqBtn')}</button>
       ${qty > 0 ? `<button class="btn btn--sm" type="button" data-act="item-move" data-item="${it.id}" data-place="${p.id}">${icon('box', 18)} ${t('toBox')}</button>
       <button class="btn btn--sm" type="button" data-act="item-retire" data-item="${it.id}" data-place="${p.id}">${icon('ban', 18)} ${t('retire')}</button>` : ''}
       <button class="btn btn--sm ${e?.min?.on ? 'btn--on' : ''}" type="button" data-act="item-min" data-item="${it.id}" data-place="${p.id}">${icon('bell', 18)} ${e?.min?.on ? store.minLabel(e) : t('minSet')}</button>
@@ -142,6 +143,11 @@ actions['item-photo'] = (el) => openPhotoSheet(el.dataset.item);
 actions['photo-zoom'] = (el) => openPhotoViewer(el.dataset.item);
 actions['item-edit'] = (el) => openItemForm(el.dataset.item);
 actions['item-move'] = (el) => openMove(el.dataset.item, el.dataset.place);
+actions['item-request'] = (el) => openRequestForm(el.dataset.item, el.dataset.place);
+/** Mindestbestand-Warnung auf der Startseite: Anfordern mit vorbelegter Menge. */
+actions['req-from-low'] = (el) => openRequestForm(el.dataset.item, el.dataset.place, { qty: Number(el.dataset.n) || 1 });
+actions['req-open'] = (el) => openRequestForm(null, null, { reqId: el.dataset.id });
+actions['req-new'] = (el) => openRequestPicker(el.dataset.place);
 actions['item-retire'] = (el) => openRetire(el.dataset.item, el.dataset.place);
 actions['item-min'] = (el) => openMin(el.dataset.item, el.dataset.place);
 actions['item-tag-new'] = (el) => {
@@ -397,7 +403,8 @@ export function openMove(itemId, placeId) {
   const drafts = store.transports().filter((x) => x.status === 'draft' && x.from === placeId);
   const free = store.freeTags(it, placeId);
   const catRows = store.itemCats(it).map((c) => ({ c, tags: store.tagsOfCat(c.id).filter((g) => free[g.id] > 0) })).filter((x) => x.tags.length);
-  const st = { mode: drafts.length ? 'existing' : 'new', sel: drafts[0]?.id || null, dest: others[0]?.id, name: '', choice: '', qty: 0, alloc: {} };
+  const st = { mode: drafts.length ? 'existing' : 'new', sel: drafts[0]?.id || null, dest: others[0]?.id, name: '', choice: '', qty: 0, alloc: {}, req: null };
+  const asks = store.requestsForItem(itemId, placeId); // Anforderungen anderer Orte für diesen Artikel
   const maxOf = (k) => (k === 'total' ? avail : free[k] || 0);
   const curOf = (k) => (k === 'total' ? st.qty : st.alloc[k] || 0);
 
@@ -434,6 +441,9 @@ export function openMove(itemId, placeId) {
     title: t('toBox'),
     render: () => `
       <div class="strip">${thumb(it, 'sm')} <div><b>${esc(store.nm(it))}</b><div class="muted">${badge(from, 'xs')} ${esc(from.name)} · ${t('freeN', { n: avail })}</div></div></div>
+      ${asks.map((r) => `<div class="banner">${icon('alert', 22)}<div>${esc(t('reqWants', { place: store.place(r.placeId).name, n: store.reqProgress(r).remaining }))}
+          <br><span class="muted">${[...r.tags.map((k) => store.nm(store.tag(k))), r.note ? `„${esc(r.note)}“` : ''].filter(Boolean).join(', ')}</span></div>
+          <button class="btn btn--sm btn--primary" type="button" data-act="mv-take" data-id="${r.id}">${t('reqTake')}</button></div>`).join('')}
       <p class="hint">${t('mvHint')}</p>
       <div class="mvhead"><span>${t('mvStock', { place: esc(from.name) })}</span><span>${t('mvBox')}</span></div>
       ${pair(`<b>${t('totalQty')}</b>`, 'total')}
@@ -457,12 +467,23 @@ export function openMove(itemId, placeId) {
       'mv-mode': (el) => { st.mode = el.dataset.v; h.redraw(); },
       'mv-sel': (el) => { st.sel = el.dataset.id; h.redraw(); },
       'mv-dest': (el) => { st.dest = el.dataset.id; h.el.querySelectorAll('.chip--badge').forEach((c) => c.classList.toggle('on', c === el)); },
+      // Anforderung eines anderen Ortes übernehmen: Ziel, Menge und Wunsch-Tags setzen
+      'mv-take': (el) => {
+        const r = store.request(el.dataset.id);
+        const q = r ? store.reqTakeable(r, placeId) : 0;
+        if (q <= 0) { toast(t('nothingFree'), 'warn'); return; }
+        const d = drafts.find((x) => x.to === r.placeId);
+        if (d) { st.mode = 'existing'; st.sel = d.id; } else { st.mode = 'new'; st.dest = r.placeId; }
+        st.req = r.id; st.qty = q; st.alloc = {};
+        for (const [k, n] of Object.entries(store.reqAlloc(r, placeId, q) || {})) st.alloc[k] = Math.min(n, q);
+        h.redraw();
+      },
       'mv-ok': () => {
         const q = st.qty;
         if (q <= 0) { toast(t('mvPickQty'), 'warn'); return; }
         let tid = st.mode === 'existing' ? st.sel : null;
         if (!tid) tid = store.createTransport({ from: placeId, to: st.dest, name: boxNameValue(st) }).id;
-        if (!store.addLine(tid, itemId, q, { ...st.alloc })) { toast(t('nothingFree'), 'warn'); return; }
+        if (!store.addLine(tid, itemId, q, { ...st.alloc }, st.req)) { toast(t('nothingFree'), 'warn'); return; }
         toast(t('movedToBox', { n: q, box: store.nm(store.transport(tid)) }));
         closeSheet();
       },
@@ -599,6 +620,108 @@ export function openBook(itemId, placeId) {
   return h;
 }
 actions['item-book'] = (el) => openBook(el.dataset.item, el.dataset.place);
+
+/* ================= Anfordern ================= */
+stepHandlers['rq-qty'] = (_a, v) => topSheet()?.onQty?.(v);
+
+/**
+ * Anforderung anlegen oder (mit reqId) bearbeiten. Reihenfolge: Artikel mit Ort und Bestand, wie viele, an einen Ort richten
+ * (optional), Wunsch-Tags (höchstens eines je Kategorie), Notiz.
+ */
+export function openRequestForm(itemId, placeId, { qty = 1, reqId = null } = {}) {
+  const ex = reqId ? store.request(reqId) : null;
+  const it = store.item(ex ? ex.itemId : itemId);
+  if (!it) return null;
+  const pid = ex ? ex.placeId : placeId;
+  const pl = store.place(pid);
+  if (!pl) return null;
+  const others = store.places().filter((p) => p.id !== pid);
+  const st = { qty: Math.max(1, ex?.qty ?? qty), to: ex?.toPlace || null, tags: {}, extra: [], note: ex?.note || '' };
+  for (const k of ex?.tags || []) {
+    const c = store.tag(k)?.cat;
+    if (c) { st.tags[c] = k; if (!it.cats?.includes(c)) st.extra.push(c); }
+  }
+  const cats = () => store.tagCats().filter((c) => it.cats?.includes(c.id) || st.extra.includes(c.id));
+  const moreCats = () => store.tagCats().filter((c) => !cats().some((x) => x.id === c.id));
+  const h = openSheet({
+    title: ex ? t('reqEditTitle') : t('reqTitle'),
+    render: () => `
+      <div class="strip">${thumb(it, 'sm')} <div><b>${esc(store.nm(it))}</b><div class="muted">${badge(pl, 'xs')} ${esc(pl.name)} · ${t('totalQty')} ${store.qtyAt(it, pid)}</div></div></div>
+      <div class="lbl">${t('reqHowMany')}</div>
+      <div class="pad">${stepper({ value: st.qty, min: 1, on: 'rq-qty' })}</div>
+      ${others.length ? `<div class="lbl">${t('reqTarget')}</div>
+        <div class="chips">${others.map((p) => `<button type="button" class="chip chip--badge ${st.to === p.id ? 'on' : ''}" data-act="rq-to" data-id="${p.id}">${badge(p, 'xs')} ${esc(p.name)}</button>`).join('')}</div>
+        <p class="hint">${t('reqTargetHint')}</p>` : ''}
+      <div class="lbl">${t('reqTags')}</div>
+      <div class="tagbox tagbox--cats">${cats().map((c) => `<div class="catblock"><div class="catname">${esc(store.nm(c))}</div>
+        <div class="tagrow">${store.tagsOfCat(c.id).map((g) => tagChip(g, { on: st.tags[c.id] === g.id, act: 'rq-tag', attrs: `data-tag="${g.id}"` })).join('')}</div></div>`).join('')}
+        ${moreCats().length ? `<div class="chips">${moreCats().map((c) => `<button type="button" class="chip chip--dash" data-act="rq-cat" data-id="${c.id}">${icon('plus', 14)} ${esc(store.nm(c))}</button>`).join('')}</div>` : ''}
+      </div>
+      <label class="lbl" for="rq-note">${t('reqNote')}</label>
+      <input id="rq-note" class="field" type="text" maxlength="80" value="${esc(st.note)}" placeholder="${t('reqNotePh')}" autocomplete="off">`,
+    footer: () => `${ex ? `<button class="btn btn--danger" type="button" data-act="rq-del" aria-label="${t('reqWithdraw')}">${icon('trash')}</button>` : ''}
+      <button class="btn btn--primary btn--grow" type="button" data-act="rq-ok">${icon('check')} ${t(ex ? 'reqSaveEdit' : 'reqSave')}</button>`,
+    actions: {
+      'rq-to': (el) => { st.to = st.to === el.dataset.id ? null : el.dataset.id; h.redraw(); },
+      'rq-tag': (el) => {
+        const g = store.tag(el.dataset.tag);
+        st.tags[g.cat] = st.tags[g.cat] === g.id ? null : g.id;
+        h.redraw();
+      },
+      'rq-cat': (el) => { st.extra.push(el.dataset.id); h.redraw(); },
+      'rq-ok': () => {
+        const tags = Object.values(st.tags).filter(Boolean);
+        const note = h.el.querySelector('#rq-note').value;
+        if (ex) store.updateRequest(ex.id, { qty: st.qty, toPlace: st.to, tags, note });
+        else if (!store.addRequest({ itemId: it.id, placeId: pid, toPlace: st.to, qty: st.qty, tags, note })) return;
+        toast(t('reqCreated'));
+        closeSheet();
+      },
+      'rq-del': async () => {
+        if (await confirmDialog({ title: t('reqWithdraw'), text: t('reqWithdrawText'), ok: t('reqWithdraw'), danger: true })) {
+          store.cancelRequest(ex.id);
+          toast(t('reqWithdrawn'));
+          closeSheet();
+        }
+      },
+    },
+  });
+  h.onQty = (v) => { st.qty = Math.max(1, v); };
+  // Notiz bei neuem Zeichnen (Chips) erhalten
+  const origRedraw = h.redraw;
+  h.redraw = () => { st.note = h.el.querySelector('#rq-note')?.value ?? st.note; origRedraw(); };
+  return h;
+}
+
+/** Artikel wählen, für den am Ort `placeId` eine Anforderung gestellt werden soll (Startseite). */
+export function openRequestPicker(placeId) {
+  const pl = store.place(placeId);
+  let q = '';
+  const rows = () => store.sortedItems().filter((it) => !q || store.nm(it).toLowerCase().includes(q))
+    .map((it) => `<button class="row" type="button" data-act="rq-pick" data-item="${it.id}">${thumb(it, 'md')}
+      <span class="row-main"><b>${esc(store.nm(it))}</b><span class="muted">${esc(store.nm(store.group(it.groupId)))}</span></span>
+      <span class="row-qty"><b>${store.qtyAt(it, placeId)}</b></span></button>`).join('')
+    || `<div class="empty small"><p>${t('noResults')}</p></div>`;
+  const h = openSheet({
+    title: t('reqPickTitle'),
+    render: () => `<p class="hint">${badge(pl, 'xs')} ${esc(pl.name)}</p>
+      <label class="search">${icon('search', 20)}<input id="rq-search" type="search" placeholder="${t('reqPickSearch')}" autocomplete="off"></label>
+      <div class="list" id="rq-list" style="margin:8px 0 0">${rows()}</div>`,
+    actions: {
+      'rq-pick': (el) => {
+        const id = el.dataset.item;
+        closeSheet();
+        setTimeout(() => openRequestForm(id, placeId), 300);
+      },
+    },
+  });
+  h.el.addEventListener('input', (e) => {
+    if (e.target.id !== 'rq-search') return;
+    q = e.target.value.trim().toLowerCase();
+    h.el.querySelector('#rq-list').innerHTML = rows();
+  });
+  return h;
+}
 
 /* ================= Aussondern ================= */
 export function openRetire(itemId, placeId) {

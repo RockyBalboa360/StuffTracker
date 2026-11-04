@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup: Anforderungen (Version 3)</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>
+  body { background: #1b1b1d; padding: 24px 16px 60px; height: auto; }
+  h1 { font-size: 26px; margin-bottom: 4px; color: #f4f4f2; }
+  .lead { color: #a2a2a8; margin-bottom: 22px; max-width: 760px; line-height: 1.4; }
+  .row-frames { display: flex; gap: 22px; overflow-x: auto; padding-bottom: 18px; align-items: flex-start; }
+  figure { margin: 0; flex: none; width: 340px; }
+  figcaption { color: #f4f4f2; font-weight: 800; margin: 0 0 4px; font-size: 15px; }
+  figcaption + p { color: #a2a2a8; font-size: 13px; margin: 0 0 10px; line-height: 1.35; min-height: 52px; }
+  .phone { position: relative; width: 340px; height: 880px; overflow: hidden; border-radius: 26px; border: 3px solid #3a3b40; background: var(--bg); }
+  .phone .scroll { position: absolute; inset: 0; overflow: hidden; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
+  .msheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-radius: 20px 20px 0 0; max-height: 96%; display: flex; flex-direction: column; overflow: hidden; }
+  .msheet .sheet-head { border-radius: 20px 20px 0 0; }
+  .msheet .sheet-body { overflow: hidden; }
+  .phone #nav { position: absolute; }
+  .pill { white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; border-radius: 99px; padding: 4px 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+  .pill--open { background: var(--accent); color: #111; }
+  .pill--part { background: var(--warn); color: #111; }
+  .pill--way { background: #2b2d31; color: #fff; border: 1px solid #55575d; }
+  .pill--ok { background: var(--ok); color: #fff; }
+  .pill--to { background: transparent; color: var(--text); border: 1px solid var(--border); text-transform: none; letter-spacing: 0; }
+  .rq { display: flex; align-items: center; gap: 12px; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 8px 12px 8px 8px; }
+  .rq-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .rq-main b { font-size: 17px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar { height: 6px; border-radius: 99px; background: var(--surface2); overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; }
+  .bar .a { background: var(--ok); } .bar .b { background: var(--accent); }
+  .rq-n { text-align: right; font-weight: 800; font-size: 24px; line-height: 1; }
+  .rq--for { border-color: var(--accent); }
+  .need { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; padding: 8px 10px 8px 8px; margin-top: 8px; }
+  .need .rq-main { flex: 1 1 170px; }
+  .need .rq-main b { font-size: 15px; }
+  .need .stepper--c { margin-left: auto; }
+  .need--for { border-color: var(--accent); }
+  .need-h { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 0; }
+  .banner { display: flex; align-items: center; gap: 10px; border: 2px solid var(--accent); border-radius: 14px; padding: 10px 12px; margin: 8px 0; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+  .banner > div { flex: 1; font-weight: 700; font-size: 14px; line-height: 1.25; }
+  .chip--dash { border-style: dashed; background: transparent; color: var(--muted); }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 28px; }
+  .notes { max-width: 780px; color: #d3d3d0; line-height: 1.5; }
+  .notes h2 { color: #f4f4f2; font-size: 18px; margin: 24px 0 6px; }
+  .notes li { margin-bottom: 4px; }
+  .tgt-note { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<h1>Anforderungen zwischen Orten – Entwurf 3 (umgesetzt in Version 0.14.0)</h1>
+<p class="lead">Ein Ort („Büro“) fordert einen Artikel mit Stückzahl an, optional mit Wunsch-Tags und optional an einen bestimmten Ort gerichtet. Anforderungen erscheinen beim Kiste-Anlegen, bei einem gerichteten Ziel zusätzlich auf dessen Startseite. Die Mindestbestand-Warnung bietet die Anforderung gleich an.</p>
+
+<div class="flow" id="flow"></div>
+<div class="row-frames" id="frames"></div>
+<div class="notes" id="notes"></div>
+
+<script type="module">
+import { icon, badge, arrow, tagChip, stepper } from '../js/ui.js';
+const W = { name: 'Wohnung' }, B = { name: 'Büro' }, P = { name: 'Pendlerwohnung' };
+const clean = { name: 'sauber', style: 'clean' }, dirty = { name: 'schmutzig', style: 'plain', color: '#8b6b2d' };
+const black = { name: 'Schwarz', style: 'plain', color: '#111111' }, grey = { name: 'Grau', style: 'plain', color: '#8E9196' };
+const mini = (n) => `<div class="stepper stepper--c"><button class="step-btn" type="button">${icon('minus', 20)}</button><input value="${n}" readonly><button class="step-btn" type="button" data-d="1">${icon('plus', 20)}</button></div>`;
+const th = (c, bg = '#FCCC0A', fg = '#111') => `<span class="thumb thumb--empty sz-md" style="--tile-bg:${bg};--tile-fg:${fg}"><b>${c}</b></span>`;
+const thPhoto = '<span class="thumb sz-md" style="background:linear-gradient(135deg,#5b6f99,#1d2433);border:1px solid var(--border)"></span>';
+const nav = (on) => `<nav id="nav" style="position:absolute">${[['home', 'Start', '#EE352E'], ['stock', 'Bestand', '#00933C'], ['transport', 'Transport', '#FCCC0A'], ['more', 'Mehr', '#A7A9AC']].map(([i, l, c]) =>
+  `<a class="navbtn ${on === i ? 'on' : ''}" href="#"><span class="navdot ${i === 'transport' ? 'navdot--dark' : ''}" style="--bc:${c}">${icon(i, 22)}</span><small>${l}</small></a>`).join('')}</nav>`;
+const sheet = (title, body, foot) => `<div class="scroll"><div class="dim"></div><section class="msheet"><header class="sheet-head"><h2>${title}</h2><button class="sheet-x">${icon('close')}</button></header>
+  <div class="sheet-body">${body}</div><footer class="sheet-foot">${foot}</footer></section></div>`;
+
+const frames = [
+  {
+    cap: '1  Anfordern (Artikel am Ort Büro)',
+    txt: 'Menge, Wunsch-Tags der Kategorien des Artikels (weitere Kategorien per Tipp aktivierbar) und optional ein Zielort.',
+    html: sheet('Anfordern', `
+      <div class="strip">${th('L')} <div><b>Langarmshirt</b><div class="muted">${badge(B, 'xs')} Büro · Bestand 0</div></div></div>
+      <div class="lbl">Wie viele?</div>
+      <div class="pad">${stepper({ value: 3, min: 1, on: 'x' })}</div>
+      <div class="lbl">An einen Ort richten (optional)</div>
+      <div class="chips"><span class="chip chip--badge on">${badge(W, 'xs')} Wohnung</span><span class="chip chip--badge">${badge(P, 'xs')} Pendlerwohnung</span></div>
+      <p class="tgt-note">Nichts gewählt: Jeder Ort sieht die Anforderung. Nochmal antippen hebt die Wahl auf.</p>
+      <div class="lbl">Wunsch-Tags (optional)</div>
+      <div class="catblock"><div class="catname">Sauberkeit</div><div class="tagrow">${tagChip(clean)}${tagChip(dirty, { on: false })}</div></div>
+      <div class="catblock" style="margin-top:12px"><div class="catname">Farben</div><div class="tagrow">${tagChip(black)}${tagChip(grey, { on: false })}</div></div>
+      <div class="chips" style="margin-top:12px"><span class="chip chip--dash">${icon('plus', 14)} Technischer Zustand</span><span class="chip chip--dash">${icon('plus', 14)} Ladezustand</span></div>
+      <label class="lbl">Notiz</label><input class="field" placeholder="z. B. für Dienstreise bis Freitag" readonly>`,
+    `<button class="btn btn--primary btn--block">${icon('check')} Anfordern</button>`),
+  },
+  {
+    cap: '2  Startseite Büro (fordert an)',
+    txt: 'Mindestbestand-Warnung mit Button „Anfordern“ (Menge vorbelegt); darunter die eigenen Anforderungen mit Fortschritt und Ziel.',
+    html: `<div class="scroll">
+      <header class="sign sign--hero" style="padding-top:26px"><div class="sign-kicker"><span>Mittwoch, 4. November</span></div>
+      <div class="hero-row"><h1>Büro</h1>${badge(B, 'xl')}</div></header>
+      <div class="stats" style="margin:12px 10px"><div class="stat"><b>8</b><span>Stücke gesamt</span></div><div class="stat"><b>5</b><span>Artikel</span></div><div class="stat"><b>3</b><span>Gruppen</span></div><div class="stat bad"><b>1</b><span>Warnungen</span></div></div>
+      <h2 class="h2 h2--warn">${icon('alert', 18)} Mindestbestand erreicht</h2>
+      <div class="list" style="margin-top:8px"><div class="row row--low">${th('S', '#FF6319', '#fff')}<span class="row-main"><b>Stirnlampe</b><span class="muted">Ab 1 · da 1</span><span><button class="btn btn--sm btn--primary">${icon('plus', 16)} 2 anfordern</button></span></span><span class="row-qty low">${icon('alert', 16)}<b>1</b></span></div></div>
+      <h2 class="h2">${icon('transport', 18)} Angefordert hier <span class="count">3</span></h2>
+      <div class="list" style="margin-top:8px">
+        <div class="rq">${th('L')}<span class="rq-main"><b>Langarmshirt</b><span class="tagrow">${tagChip(clean, { small: true })}${tagChip(black, { small: true })}</span><span><span class="pill pill--open">offen</span> <span class="pill pill--to">an Wohnung</span></span><span class="bar"><i class="a" style="width:0"></i></span></span><span class="rq-n">3</span></div>
+        <div class="rq">${thPhoto}<span class="rq-main"><b>Socken schwarz</b><span class="muted">Kiste 2 unterwegs · 1 bereits da</span><span><span class="pill pill--part">1 da · 2 unterwegs</span></span><span class="bar"><i class="a" style="width:25%"></i><i class="b" style="width:50%"></i></span></span><span class="rq-n">4</span></div>
+        <div class="rq" style="opacity:.75">${th('U')}<span class="rq-main"><b>USB-C-Kabel</b><span class="muted">alle Orte · angekommen heute</span><span><span class="pill pill--ok">erledigt</span></span><span class="bar"><i class="a" style="width:100%"></i></span></span><span class="rq-n">2</span></div>
+      </div></div>${nav('home')}`,
+  },
+  {
+    cap: '3  Startseite Wohnung (Ziel)',
+    txt: 'Gerichtete Anforderungen stehen hier gleich oben: „Angefragt bei dir“. Ein Tipp öffnet die Kiste nach Büro mit vorbelegten Mengen.',
+    html: `<div class="scroll">
+      <header class="sign sign--hero" style="padding-top:26px"><div class="sign-kicker"><span>Mittwoch, 4. November</span></div>
+      <div class="hero-row"><h1>Wohnung</h1>${badge(W, 'xl')}</div></header>
+      <div class="stats" style="margin:12px 10px"><div class="stat"><b>47</b><span>Stücke gesamt</span></div><div class="stat"><b>11</b><span>Artikel</span></div><div class="stat"><b>9</b><span>Gruppen</span></div><div class="stat bad"><b>1</b><span>Angefragt</span></div></div>
+      <h2 class="h2 h2--ask">${icon('alert', 18)} Angefragt bei dir <span class="count">1</span></h2>
+      <div class="list" style="margin-top:8px"><div class="rq rq--for">${th('L')}<span class="rq-main"><b>Langarmshirt</b><span class="muted">${badge(B, 'xs')} Büro fordert an · hier 4 frei</span><span class="tagrow">${tagChip(clean, { small: true })}${tagChip(black, { small: true })}</span><span><button class="btn btn--sm btn--primary">${icon('box', 16)} Kiste nach Büro</button></span></span><span class="rq-n">3</span></div></div>
+      <p class="tgt-note" style="margin:10px 16px">Nicht gerichtete Anforderungen anderer Orte siehst du beim Kiste-Anlegen und im Transport-Tab unter „Anfragen“.</p>
+      <div class="quick" style="margin-top:12px"><button class="btn">${icon('plus')} Neuer Artikel</button><button class="btn">${icon('plus')} Anfordern</button></div>
+      </div>${nav('home')}`,
+  },
+  {
+    cap: '4  Kiste anlegen: Anforderungen sichtbar',
+    txt: 'Ziel „Büro“ → Block „In Büro angefordert“. An Wohnung gerichtete stehen oben (gelber Rand). „Alle übernehmen“ füllt die Kiste.',
+    html: sheet('Neue Kiste', `
+      <div class="lbl" style="margin-top:0">Von</div><div class="chips"><span class="chip chip--badge on">${badge(W, 'xs')} Wohnung</span></div>
+      <div class="lbl">Nach</div><div class="chips"><span class="chip chip--badge on">${badge(B, 'xs')} Büro</span><span class="chip chip--badge">${badge(P, 'xs')} Pendlerwohnung</span></div>
+      <div class="need-h"><span class="lbl" style="margin:0">In Büro angefordert (3)</span><button class="linkbtn">Alle übernehmen</button></div>
+      <div class="need need--for">${th('L')}<span class="rq-main"><b>Langarmshirt</b><span class="muted">an Wohnung gerichtet · gefordert 3 · hier 4 frei</span><span class="tagrow">${tagChip(clean, { small: true })}${tagChip(black, { small: true })}</span></span>${mini(3)}</div>
+      <div class="need">${thPhoto}<span class="rq-main"><b>Socken schwarz</b><span class="muted">alle Orte · noch offen 1 · hier 10 frei</span></span>${mini(1)}</div>
+      <div class="need" style="opacity:.55">${th('H')}<span class="rq-main"><b>Stirnlampe</b><span class="muted">alle Orte · gefordert 1 · hier 0 frei</span></span><span class="pill pill--way">nicht da</span></div>
+      <div class="lbl">Name der Kiste</div><div class="chips"><span class="chip">Kiste 1</span><span class="chip">Kiste 2</span></div>`,
+    `<button class="btn btn--primary btn--block">${icon('box')} Kiste anlegen · 4 Stück</button>`),
+  },
+  {
+    cap: '5  „In Kiste“ im Artikel',
+    txt: 'Fordert ein anderer Ort den Artikel an, erscheint ein Hinweis; ein Tipp setzt Ziel, Menge und die Wunsch-Tags.',
+    html: sheet('In Kiste', `
+      <div class="strip">${th('L')} <div><b>Langarmshirt</b><div class="muted">${badge(W, 'xs')} Wohnung · 4 frei</div></div></div>
+      <div class="banner">${icon('alert', 22)}<div>Büro fordert 3 an<br><span class="muted">sauber, Schwarz · „für Dienstreise bis Freitag“</span></div><button class="btn btn--sm btn--primary">Übernehmen</button></div>
+      <div class="mvhead"><span>Bestand in Wohnung</span><span>In der Kiste</span></div>
+      <div class="mvrow"><div class="mvlab"><b>Gesamt</b></div><div class="mvpair">${mini(1)}${arrow('mini')}${mini(3)}</div></div>
+      <div class="catname catname--mv">Sauberkeit</div>
+      <div class="mvrow"><div class="mvlab">${tagChip(clean)}</div><div class="mvpair">${mini(1)}${arrow('mini')}${mini(3)}</div></div>
+      <div class="catname catname--mv">Farben</div>
+      <div class="mvrow"><div class="mvlab">${tagChip(black)}</div><div class="mvpair">${mini(2)}${arrow('mini')}${mini(3)}</div></div>
+      <div class="lbl">In welche Kiste?</div>
+      <div class="segmented"><button class="on">Vorhandene Kiste</button><button>${icon('plus', 16)} Neue Kiste</button></div>
+      <div class="boxlist mv-gap"><div class="boxcard on"><span class="routes">${badge(W, 'xs')}${arrow('mini')}${badge(B, 'xs')}</span><b>Kiste 2</b><span class="muted">2 Artikel</span></div></div>`,
+    `<button class="btn btn--primary btn--block">${icon('box')} In Kiste (3)</button>`),
+  },
+];
+document.getElementById('frames').innerHTML = frames.map((f) => `<figure><figcaption>${f.cap}</figcaption><p>${f.txt}</p><div class="phone">${f.html}</div></figure>`).join('');
+document.getElementById('flow').innerHTML = [
+  ['pill--open', 'offen'], ['', '→'], ['pill--part', 'in Kiste (vorgemerkt)'], ['', '→'], ['pill--way', 'unterwegs'], ['', '→'], ['pill--ok', 'angekommen = erledigt'],
+].map(([c, t]) => (c ? `<span class="pill ${c}">${t}</span>` : `<span style="color:#a2a2a8">${t}</span>`)).join('');
+document.getElementById('notes').innerHTML = `
+<h2>Deine Entscheidungen – und wie sie im Entwurf aussehen</h2>
+<ul>
+<li><b>Wunsch-Tags:</b> Es erscheinen die Tag-Kategorien, die der Artikel schon hat (z. B. Sauberkeit, Farben). Weitere Kategorien aktivierst du mit einem Tipp auf die gestrichelten Chips („+ Technischer Zustand“).</li>
+<li><b>Zielort optional:</b> Chips für alle anderen Orte, ein Tipp wählt, noch ein Tipp hebt auf. Mit Ziel erscheint die Anforderung zusätzlich auf der Startseite dieses Ortes („Angefragt bei dir“) und im Kiste-Dialog ganz oben; ohne Ziel sieht sie jeder Ort beim Kiste-Anlegen nach dem anfordernden Ort.</li>
+<li><b>Mindestbestand:</b> In der Warnung erscheint der Button „2 anfordern“ (fehlende Menge bis über den Mindestbestand, änderbar). Ein Tipp öffnet Ansicht 1 mit vorbelegter Menge.</li>
+</ul>
+<h2>Weitere Punkte</h2>
+<ul>
+<li><b>Fortschritt</b> zählt automatisch: Kiste in Vorbereitung = vorgemerkt, abgeschickt = unterwegs, Ankunft bestätigt = erledigt. Teillieferungen sind möglich, der Rest bleibt offen.</li>
+<li><b>Ändern/Löschen:</b> Anforderung antippen → Menge, Tags, Ziel ändern oder zurückziehen. Erledigte bleiben 24 Stunden sichtbar, danach im Protokoll.</li>
+<li><b>Transport-Tab:</b> vierter Reiter „Anfragen“ mit allen offenen Anforderungen (gerichtete mit Ortsmarke).</li>
+</ul>`;
+</script>
+</body>
+</html>

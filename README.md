@@ -16,6 +16,13 @@ Optik: New-York-Subway-Beschilderung (schwarzes Schild, Helvetica-artige Schrift
   „Bearbeiten“; Vorgabe je Gruppe einstellbar). Ein Stück trägt je Kategorie höchstens ein Tag (z. B. sauber **und** schwarz);
   die Summe der Tag-Mengen einer Kategorie ist höchstens die Gesamtmenge, höchstens 6 verschiedene Tags je Kategorie, Artikel
   und Ort. Tag-Verknüpfungen gelten nur innerhalb einer Kategorie. Kisten, Zu-/Abgang und Startseite arbeiten je Kategorie.
+- **Anforderungen:** Ein Ort fordert einen Artikel mit Stückzahl an („Anfordern“ im Artikel, auf der Startseite oder direkt in der
+  Mindestbestand-Warnung mit der fehlenden Menge). Reihenfolge im Dialog: Artikel mit Ort und Bestand, wie viele, optional an einen
+  Ort richten, Wunsch-Tags (Kategorien des Artikels, weitere aktivierbar; ein Tag je Kategorie), Notiz. Gesehen werden Anforderungen
+  beim Kiste-Anlegen mit dem fordernden Ort als Ziel („Alle übernehmen“), im Dialog „In Kiste“ des Artikels (Hinweis „… fordert … an“),
+  auf der Startseite (gerichtete Anforderungen als „Angefragt bei dir“, eigene als „Angefordert hier“) und im Transport-Tab
+  unter „Anfragen“. Der Fortschritt kommt aus den Kisten: vorgemerkt → unterwegs → angekommen = erledigt (24 Stunden sichtbar).
+  Entwurf der Ansichten: `docs/mockup-anforderungen.html`.
 - **Artikel aus der Bestandsliste eines Ortes:** Der Dialog zeigt zuerst diesen Ort; „Weitere Orte“ klappt auf (je Ort eine
   Zeile mit Tag-Kreisen und Menge, antippen für die volle Karte). Aus „Alle“ erscheinen alle Orte wie bisher.
 - **Fotos:** Antippen eines Fotos (Liste oder Artikel) zeigt es groß; die Kamera-Schaltfläche am Foto ändert es. Neue Fotos werden
